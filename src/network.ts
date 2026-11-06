@@ -1,5 +1,5 @@
 import { applyPatch, type Patch } from '../shared/sync';
-import { newGame } from '../shared/world';
+import { emptySnapshot, PROTOCOL_VERSION } from '../shared/world';
 import { createClient, type Session } from '@supabase/supabase-js';
 import { Client, type Room } from 'colyseus.js';
 import type { Room as VoiceRoom, RemoteParticipant } from 'livekit-client';
@@ -23,9 +23,9 @@ export class OfficeConnection {
     // Wake a free instance before starting the authenticated matchmaking request.
     await fetch(`${serverUrl}/health`, { signal: AbortSignal.timeout(90000) }).then(r => { if (!r.ok) throw new Error('The office is still starting.'); });
     const { roomId } = await api('/session', {});
-    this.room = await new Client(serverUrl.replace(/^http/, 'ws')).joinById(roomId, { token: session.access_token });
-    let latest: Snapshot = { players: [], locked:false, host:null, game:newGame(), links:[] };
-    this.room.onMessage('snapshot', (s: Snapshot) => { latest=s; handlers.snapshot(s,this.room!.sessionId); });
+    this.room = await new Client(serverUrl.replace(/^http/, 'ws')).joinById(roomId, { token: session.access_token, protocol: PROTOCOL_VERSION });
+    let latest: Snapshot = emptySnapshot();
+    this.room.onMessage('snapshot', (s: Snapshot) => { if(s.protocol!==PROTOCOL_VERSION){handlers.removed('Your office version changed. Reload this page.');return;} latest=s; handlers.snapshot(s,this.room!.sessionId); });
     this.room.onMessage('patch', (p: Patch) => { latest=applyPatch(latest,p); handlers.snapshot(latest,this.room!.sessionId); });
     this.room.onMessage('heartbeat', () => {});
     this.room.onMessage('chat', handlers.chat); this.room.onMessage('notice', handlers.notice);

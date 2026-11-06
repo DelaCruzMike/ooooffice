@@ -1,64 +1,35 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { OfficeEngine } from '../server/engine.js';
-import { DEFAULT_AVATAR, ROOMS, SEATS, SPAWN, WALLS, canStand, move, roomAt, newGame, dropDisc, cleanAvatar } from '../shared/world.js';
-import { validateLinks, authenticate } from '../server/services.js';
-const engine = () => { const e = new OfficeEngine(); e.add('a','user-a','Alex',DEFAULT_AVATAR,'owner','Team'); e.add('b','user-b','Sam',DEFAULT_AVATAR,'member','Team'); return e; };
-test('one floor contains the 11 requested spaces plus commons, 50 workstations and 50 meeting seats',()=>{
-  assert.equal(ROOMS.length,12); assert.equal(SEATS.filter(s=>s.kind==='desk').length,50); assert.equal(SEATS.filter(s=>s.kind==='meeting').length,50);
-  for(const s of SEATS) assert.ok(canStand(s),`seat ${s.id} is reachable without overlapping a wall or table`);
+import test from 'node:test';import assert from 'node:assert/strict';
+import { OfficeEngine,dartScore } from '../shared/engine.js';
+import { DEFAULT_AVATAR,ROOMS,SEATS,BEDS,FURNITURE,ACTIVITIES,SPAWN,canStand,move,roomAt,newLocks,newGame,dropDisc,cleanAvatar,makePlayer,stepPlayer,jumpPlayer,groundHeight,chaseCamera } from '../shared/world.js';
+import { validateLinks,authenticate } from '../server/services.js';
+const engine=(practice=false)=>{const e=new OfficeEngine(practice);e.add('a','user-a','Alex',DEFAULT_AVATAR,'owner','Team');e.add('b','user-b','Sam',DEFAULT_AVATAR,'member','Team');return e;};
+const atActivity=(e:OfficeEngine,id:string)=>{const a=ACTIVITIES.find(a=>a.id===id)!;for(const p of e.players.values())Object.assign(p,a.position,{room:a.room});return a;};
+test('floor has 13 spaces, exactly 46 workstations, 50 tiered auditorium seats, 8 meeting seats and 20 beds',()=>{assert.equal(ROOMS.length,13);assert.equal(SEATS.filter(s=>s.kind==='desk').length,46);for(const r of ROOMS.filter(r=>r.seats))assert.equal(SEATS.filter(s=>s.room===r.id&&s.kind==='desk').length,r.seats);assert.equal(SEATS.filter(s=>s.room==='meeting').length,50);assert.equal(new Set(SEATS.filter(s=>s.room==='meeting').map(s=>s.y)).size,5);assert.equal(SEATS.filter(s=>s.room==='meeting-small').length,8);assert.equal(BEDS.length,20);assert.equal(SEATS.filter(s=>s.room==='pantry').length,24);});
+test('department furnishing specifications use single executive desk, headsets and dual monitors',()=>{assert.equal(FURNITURE.filter(f=>f.room==='operations'&&f.kind==='executive').length,1);assert.equal(SEATS.filter(s=>s.room==='operations').length,3);assert.equal(FURNITURE.filter(f=>f.room==='csr'&&f.headset).length,6);assert.equal(FURNITURE.filter(f=>f.room==='editor'&&f.monitors===2).length,6);assert.equal(ROOMS.find(r=>r.id==='csr')!.w,ROOMS.find(r=>r.id==='editor')!.w);assert.equal(ROOMS.find(r=>r.id==='csr')!.d,ROOMS.find(r=>r.id==='editor')!.d);});
+test('every room, workstation, bed exit, and activity is reachable from the spawn',()=>{const step=.25,key=(x:number,z:number)=>`${x},${z}`,seen=new Set([key(SPAWN.x,SPAWN.z)]),q=[{...SPAWN}];for(let i=0;i<q.length;i++)for(const[dx,dz]of[[step,0],[-step,0],[0,step],[0,-step]]){const p={x:q[i].x+dx,z:q[i].z+dz};if(!seen.has(key(p.x,p.z))&&canStand(p)&&groundHeight(p)-groundHeight(q[i])<=.301){seen.add(key(p.x,p.z));q.push(p);}}for(const r of ROOMS)assert.ok(q.some(p=>roomAt(p)===r.id),r.name);for(const s of SEATS)assert.ok(q.some(p=>roomAt(p)===s.room&&Math.hypot(p.x-s.x,p.z-s.z)<1.25),s.id);for(const b of BEDS)assert.ok(q.some(p=>Math.hypot(p.x-b.exit.x,p.z-b.exit.z)<.4),b.id);for(const a of ACTIVITIES)assert.ok(q.some(p=>roomAt(p)===a.room&&Math.hypot(p.x-a.position.x,p.z-a.position.z)<.75),a.id);});
+test('tank controls turn without strafing and move forward or backward while preserving heading',()=>{const p=makePlayer('a','A');const start={...p};stepPlayer(p,{forward:0,turn:1},.1,newLocks());assert.equal(p.x,start.x);assert.equal(p.z,start.z);assert.notEqual(p.rotation,start.rotation);p.rotation=0;stepPlayer(p,{forward:1,turn:0},.1,newLocks());assert.ok(p.z>start.z);const z=p.z;stepPlayer(p,{forward:-1,turn:0},.1,newLocks());assert.ok(p.z<z);assert.equal(p.rotation,0);});
+test('jump reaches about 0.8m, lands, rejects repeated jumps and is unavailable in seats/beds',()=>{const p=makePlayer('a','A');assert.ok(jumpPlayer(p));assert.equal(jumpPlayer(p),false);let max=0;for(let i=0;i<100;i++){stepPlayer(p,{forward:0,turn:0},.01,newLocks());max=Math.max(max,p.y);}assert.ok(max>.7&&max<.85);assert.equal(p.y,0);assert.equal(p.grounded,true);p.seat='a';assert.equal(jumpPlayer(p),false);p.seat=null;p.bed='b';assert.equal(jumpPlayer(p),false);});
+test('invalid input is ignored, movement is bounded, and jumps cannot bypass walls or veranda rails',()=>{const e=engine();e.input('a',{forward:NaN,turn:1});assert.equal(e.inputs.size,0);e.input('a',{forward:999,turn:999});assert.equal(e.inputs.get('a')!.forward,1);const p=e.players.get('a')!;Object.assign(p,{x:35,z:2,rotation:Math.PI/2,room:'smoking'});jumpPlayer(p);for(let i=0;i<20;i++)stepPlayer(p,{forward:1,turn:0},.05,e.locks);assert.ok(p.x<36);});
+test('seat claims require proximity and same room, are exclusive, and release on disconnect',()=>{const e=engine(),s=SEATS.find(s=>s.room==='csr')!;e.action('a','seat',{id:s.id});assert.equal(e.players.get('a')!.seat,null);for(const p of e.players.values())Object.assign(p,{x:s.x,z:s.z,room:s.room});e.players.get('b')!.room='hallway';e.action('b','seat',{id:s.id});assert.equal(e.players.get('b')!.seat,null);e.players.get('b')!.room=s.room;e.action('a','seat',{id:s.id});e.action('b','seat',{id:s.id});assert.equal(e.players.get('a')!.seat,s.id);assert.equal(e.players.get('b')!.seat,null);e.remove('a');e.action('b','seat',{id:s.id});assert.equal(e.players.get('b')!.seat,s.id);e.action('b','stand',{});assert.equal(e.players.get('b')!.seat,null);assert.ok(canStand(e.players.get('b')!));});
+test('beds have exclusive claims, keep availability unchanged, release and find a walkable get-up point',()=>{const e=engine(),b=BEDS[0];for(const p of e.players.values())Object.assign(p,b.exit,{room:b.room,status:'busy'});e.action('a','bed',{id:b.id});e.action('b','bed',{id:b.id});const p=e.players.get('a')!;assert.equal(p.bed,b.id);assert.equal(e.players.get('b')!.bed,null);assert.equal(p.status,'busy');e.action('a','stand',{});assert.equal(p.bed,null);assert.equal(p.status,'busy');assert.ok(canStand(p));e.action('b','bed',{id:b.id});e.remove('b');assert.ok(![...e.players.values()].some(p=>p.bed===b.id));});
+test('meeting spaces have independent locks; unauthorized members cannot unlock and host departure releases only their lock',()=>{const e=engine(),a=e.players.get('a')!,b=e.players.get('b')!;a.room='meeting';b.room='meeting-small';e.action('a','meeting',{room:'meeting',locked:true});e.action('b','meeting',{room:'meeting-small',locked:true});e.action('b','meeting',{room:'meeting',locked:false});assert.equal(e.locks.meeting.locked,true);assert.equal(e.locks['meeting-small'].locked,true);let p={x:19.5,z:13};for(let i=0;i<15;i++)p=move(p,{x:0,z:1},.1,e.locks);assert.notEqual(roomAt(p),'meeting');e.remove('a');assert.equal(e.locks.meeting.locked,false);assert.equal(e.locks['meeting-small'].locked,true);});
+test('emotes use an allowlist and timestamps, expire, and cancel on movement',()=>{const e=engine(),p=e.players.get('a')!;e.action('a','emote',{emote:'fly-through-wall'});assert.equal(p.emote,'');e.action('a','emote',{emote:'kiss'});assert.equal(p.emote,'kiss');assert.ok(p.emoteAt>0);p.emoteAt=Date.now()-3000;e.tick(.05);assert.equal(p.emote,'');p.emote='disco';p.emoteAt=Date.now();e.input('a',{forward:1,turn:0});e.tick(.05);assert.equal(p.emote,'');});
+test('office cap stays 50 and snapshot copies cannot mutate authoritative records',()=>{const e=engine();for(let i=2;i<50;i++)e.add(String(i),String(i),'Pilot',DEFAULT_AVATAR,'member','Test');assert.throws(()=>e.add('51','51','Pilot',DEFAULT_AVATAR,'member','Test'));const s=e.snapshot();s.players[0].x=999;s.games.connect4.board[0]=9;s.locks.meeting.locked=true;assert.notEqual(e.players.get('a')!.x,999);assert.equal(e.games.connect4.board[0],0);assert.equal(e.locks.meeting.locked,false);});
+test('chat is bounded, rate limited, scoped and not retained in snapshots',()=>{const e=engine();assert.equal(e.action('a','chat',{text:' hi ',scope:'room'})?.text,'hi');assert.equal(e.action('a','chat',{text:'spam'}),null);assert.equal('messages' in e.snapshot(),false);});
+test('Connect Four gravity, turn order, wins, and local pass-and-play are enforced',()=>{const g=newGame();g.players=['a','b'];assert.equal(dropDisc(g,'b',0),false);for(let i=0;i<3;i++){assert.ok(dropDisc(g,'a',0));assert.ok(dropDisc(g,'b',1));}assert.ok(dropDisc(g,'a',0));assert.equal(g.winner,1);assert.equal(dropDisc(g,'b',2),false);const e=engine(true);atActivity(e,'connect4-commons');e.action('a','game:join',{activity:'connect4-commons'});e.action('a','game:drop',{activity:'connect4-commons',column:2});e.action('a','game:drop',{activity:'connect4-commons',column:3});assert.equal(e.games.connect4.board.filter(Boolean).length,2);});
+test('darts scoring covers bullseyes, sectors, doubles, triples and misses',()=>{assert.equal(dartScore(0,0),50);assert.equal(dartScore(.06,0),25);assert.equal(dartScore(0,-.8),20);assert.equal(dartScore(0,-.6),60);assert.equal(dartScore(0,-.97),40);assert.equal(dartScore(1.1,0),0);});
+test('darts boards are independent, calculate scores server-side and restore turn-start score on a bust',()=>{const e=engine(true);atActivity(e,'darts-commons');e.action('a','game:join',{activity:'darts-commons'});const g=e.games.darts['darts-commons'];e.action('a','game:dart',{activity:'darts-commons',x:0,y:-.6,score:999});assert.equal(g.scores[0],241);assert.equal(e.games.darts['darts-social'].scores[0],301);g.scores[0]=10;g.start=31;const r=(e as unknown as {rate:Map<string,{dart:number}>}).rate;r.get('a')!.dart=0;e.action('a','game:dart',{activity:'darts-commons',x:0,y:-.8});assert.equal(g.scores[0],31);assert.equal(g.darts,0);});
+test('online games reject spectators, wrong turns, spoofed results, and remote activity actions',()=>{const e=engine();e.action('a','game:join',{activity:'chess-commons'});assert.equal(e.games.chess.players.length,0);atActivity(e,'chess-commons');e.action('a','game:join',{activity:'chess-commons'});e.action('b','game:join',{activity:'chess-commons'});const fen=e.games.chess.fen;e.action('b','game:chess',{activity:'chess-commons',from:'e7',to:'e5'});assert.equal(e.games.chess.fen,fen);e.action('a','game:chess',{activity:'chess-commons',from:'e2',to:'e5'});assert.equal(e.games.chess.fen,fen);e.action('a','game:chess',{activity:'chess-commons',from:'e2',to:'e4'});assert.notEqual(e.games.chess.fen,fen);e.remove('a');assert.equal(e.games.chess.players.length,0);});
+test('chess pass-and-play validates checkmate and threefold repetition',()=>{const e=engine(true);atActivity(e,'chess-commons');const play=(from:string,to:string)=>e.action('a','game:chess',{activity:'chess-commons',from,to});e.action('a','game:join',{activity:'chess-commons'});play('f2','f3');play('e7','e5');play('g2','g4');play('d8','h4');assert.equal(e.games.chess.result,'Checkmate');e.action('a','game:reset',{activity:'chess-commons'});for(let i=0;i<2;i++){play('g1','f3');play('g8','f6');play('f3','g1');play('f6','g8');}assert.equal(e.games.chess.result,'Draw');});
+test('avatar storage stays compatible, unsafe work links and unauthenticated access are rejected',async()=>{assert.equal(cleanAvatar({skin:'red'}).skin,DEFAULT_AVATAR.skin);assert.equal(cleanAvatar(DEFAULT_AVATAR).shirt,DEFAULT_AVATAR.shirt);assert.throws(()=>validateLinks([{label:'bad',url:'javascript:alert(1)'}]));assert.throws(()=>validateLinks([{label:'bad',url:'https://user:password@example.com'}]));assert.equal(validateLinks([{label:' Docs ',url:'https://example.com'}])[0].label,'Docs');await assert.rejects(authenticate(''));});
+test('chase camera stays close behind the character and pulls forward at obstructions',()=>{const p=makePlayer('a','A');p.rotation=0;const c=chaseCamera(p);assert.ok(c.position.z<p.z);assert.ok(Math.hypot(c.position.x-p.x,c.position.z-p.z)<=3.51);Object.assign(p,{x:-6.7,z:-11,rotation:0});const blocked=chaseCamera(p);assert.ok(Math.hypot(blocked.position.x-p.x,blocked.position.z-p.z)<3.5);});
+test('chess special rules support castling, en passant, and explicit pawn promotion',()=>{
+ const e=engine(true);atActivity(e,'chess-commons');e.action('a','game:join',{activity:'chess-commons'});
+ const play=(from:string,to:string,promotion='q')=>e.action('a','game:chess',{activity:'chess-commons',from,to,promotion});
+ for(const[from,to]of[['e2','e4'],['e7','e5'],['g1','f3'],['b8','c6'],['f1','c4'],['g8','f6'],['e1','g1']])play(from,to);
+ assert.ok(e.games.chess.history.includes('O-O'));assert.ok(e.games.chess.fen.split(' ')[0].endsWith('RNBQ1RK1'));
+ e.action('a','game:reset',{activity:'chess-commons'});for(const[from,to]of[['e2','e4'],['a7','a6'],['e4','e5'],['d7','d5'],['e5','d6']])play(from,to);assert.equal(e.games.chess.history.at(-1),'exd6');assert.ok(!e.games.chess.fen.split(' ')[0].split('/')[3].includes('p'));
+ e.action('a','game:reset',{activity:'chess-commons'});for(const[from,to]of[['a2','a4'],['h7','h5'],['a4','a5'],['h5','h4'],['a5','a6'],['h4','h3'],['a6','b7'],['h3','g2'],['b7','a8']])play(from,to,'n');assert.ok(e.games.chess.history.at(-1)?.includes('=N'));assert.ok(e.games.chess.fen.startsWith('Nnbqkbnr'));
 });
-test('every room and seat is reachable from the commons through the collision map',()=>{
-  // Flood-fill half-meter cells using the same collision rules as clients and server.
-  const step=.5, key=(x:number,z:number)=>`${x},${z}`; const start={x:SPAWN.x,z:SPAWN.z}; const seen=new Set([key(start.x,start.z)]),queue=[start];
-  for(let i=0;i<queue.length;i++)for(const [dx,dz]of [[step,0],[-step,0],[0,step],[0,-step]]){
-    const q={x:queue[i].x+dx,z:queue[i].z+dz};if(!seen.has(key(q.x,q.z))&&canStand(q)){seen.add(key(q.x,q.z));queue.push(q);}
-  }
-  for(const r of ROOMS) assert.ok(queue.some(p=>roomAt(p)===r.id),`${r.name} has a walkable doorway`);
-  for(const s of SEATS) assert.ok(queue.some(p=>Math.hypot(p.x-s.x,p.z-s.z)<.7),`${s.id} is reachable`);
-});
-test('movement clamps time, normalizes diagonals, rejects invalid inputs, and cannot tunnel through walls',()=>{
-  const e=engine(); const p=e.players.get('a')!;
-  e.input('a',{x:NaN,z:0}); assert.equal(e.inputs.size,0); e.input('a',{x:999,z:999});e.tick(.05);assert.ok(Math.hypot(p.x-SPAWN.x,p.z-SPAWN.z)<=.276);
-  const r=ROOMS[0]; let q={x:r.x+4,z:r.z+r.d/2+1};for(let i=0;i<100;i++)q=move(q,{x:0,z:-1},1);assert.ok(q.z>r.z+r.d/2);
-  const w=WALLS[0];assert.equal(canStand(w),false);
-});
-test('seat claims are exclusive, proximity checked, and released on disconnect',()=>{
-  const e=engine(),s=SEATS[0];e.action('a','seat',{id:s.id});assert.equal(e.players.get('a')!.seat,null);
-  Object.assign(e.players.get('a')!,s,{id:'a',room:s.room});Object.assign(e.players.get('b')!,s,{id:'b',room:s.room});
-  e.action('a','seat',{id:s.id});e.action('b','seat',{id:s.id});assert.equal(e.players.get('a')!.seat,s.id);assert.equal(e.players.get('b')!.seat,null);
-  e.remove('a');e.action('b','seat',{id:s.id});assert.equal(e.players.get('b')!.seat,s.id);
-});
-test('meeting host locks, unauthorized members cannot unlock, and host departure clears lock',()=>{
-  const e=engine();const p=e.players.get('a')!;p.room='meeting';e.action('a','meeting',{locked:true});assert.equal(e.locked,true);
-  e.action('b','meeting',{locked:false});assert.equal(e.locked,true);
-  let q={x:31,z:12};for(let i=0;i<10;i++)q=move(q,{x:0,z:1},.1,e.locked);assert.notEqual(roomAt(q),'meeting');
-  e.remove('a');assert.equal(e.locked,false);assert.equal(e.host,null);
-});
-test('office capacity is 50, snapshots cannot mutate player coordinates or appearance',()=>{
-  const e=engine();for(let i=2;i<50;i++)e.add(String(i),String(i),'Pilot',DEFAULT_AVATAR,'member','Test');assert.throws(()=>e.add('51','51','Pilot',DEFAULT_AVATAR,'member','Test'));
-  const s=e.snapshot();s.players[0].x=999;s.players[0].avatar.shirt='#ffffff';assert.notEqual(e.players.get('a')!.x,999);assert.notEqual(e.players.get('a')!.avatar.shirt,'#ffffff');
-});
-test('chat is bounded, rate limited, scoped, and has no saved history in snapshots',()=>{
-  const e=engine();const m=e.action('a','chat',{text:' hello ',scope:'room'});assert.equal(m?.text,'hello');assert.equal(m?.scope,'room');assert.equal(e.action('a','chat',{text:'spam'}),null);assert.equal('messages' in e.snapshot(),false);
-});
-test('Connect Four enforces turn order, columns, gravity, wins, and completed-game rejection',()=>{
-  const g=newGame();g.players=['a','b'];assert.equal(dropDisc(g,'b',0),false);assert.equal(dropDisc(g,'a',1.5),false);
-  for(let i=0;i<3;i++){assert.ok(dropDisc(g,'a',0));assert.ok(dropDisc(g,'b',1));}assert.ok(dropDisc(g,'a',0));assert.equal(g.winner,1);assert.equal(dropDisc(g,'b',2),false);
-  const h=newGame();h.players=['a','b'];for(let i=0;i<6;i++)assert.ok(dropDisc(h,i%2?'b':'a',3));assert.equal(dropDisc(h,'a',3),false);
-});
-test('Connect Four rejects spectators and resets when a player leaves',()=>{
-  const e=engine();e.action('a','game:join',{});assert.equal(e.game.players.length,0);
-  for(const p of e.players.values())Object.assign(p,{room:'recreation',x:14,z:3});e.action('a','game:join',{});e.action('b','game:join',{});assert.equal(e.game.players.length,2);e.remove('a');assert.equal(e.game.players.length,0);
-});
-test('avatar and work links are sanitized; executable or credential-bearing links are rejected',()=>{
-  assert.equal(cleanAvatar({skin:'red',style:'<script>'}).skin,DEFAULT_AVATAR.skin);
-  assert.throws(()=>validateLinks([{label:'bad',url:'javascript:alert(1)'}]));assert.throws(()=>validateLinks([{label:'bad',url:'https://name:password@example.com'}]));
-  assert.equal(validateLinks([{label:' Docs ',url:'https://example.com'}])[0].label,'Docs');
-});
-test('server denies unauthenticated entry when services are unconfigured',async()=>{await assert.rejects(authenticate(''));});
-
-test('seat interactions cannot bypass room walls or voice-zone transitions',()=>{
-  const e=engine(),p=e.players.get('a')!,s=SEATS.find(s=>s.room==='meeting')!;
-  Object.assign(p,{x:s.x-2,z:s.z,room:'hallway'});e.action('a','seat',{id:s.id});assert.equal(p.seat,null);
-});
+test('all bed cameras frame a resting player from inside the room rather than behind a headboard',()=>{for(const b of BEDS){const p=makePlayer('a','A');Object.assign(p,b,{id:'a',bed:b.id});const c=chaseCamera(p);assert.ok(Math.hypot(c.position.x-c.target.x,c.position.z-c.target.z)>2,b.id);assert.ok(c.position.y<3.2);}});
+test('taking an available table chair before joining preserves the existing opponent',()=>{const e=engine();atActivity(e,'chess-commons');e.action('a','game:join',{activity:'chess-commons'});const b=e.players.get('b')!,s=SEATS.find(s=>s.id==='chess-black')!;Object.assign(b,{x:s.x,z:s.z,room:'lounge'});e.action('b','seat',{id:s.id});e.action('b','game:join',{activity:'chess-commons'});assert.equal(b.seat,s.id);assert.deepEqual(e.games.chess.players,['a','b']);});

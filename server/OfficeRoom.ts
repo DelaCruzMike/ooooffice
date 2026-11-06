@@ -2,7 +2,7 @@ import { SnapshotDiffer } from '../shared/sync.js';
 import { Room, type Client } from '@colyseus/core';
 import { OfficeEngine } from './engine.js';
 import { authenticate, evictVoice, loadLinks, saveProfile, type Identity } from './services.js';
-import { roomAt, voiceZone, cleanAvatar, type Vec, type Player } from '../shared/world.js';
+import { roomAt, voiceZone, cleanAvatar, PROTOCOL_VERSION, type Vec, type Player } from '../shared/world.js';
 export let office: OfficeRoom;
 export class OfficeRoom extends Room {
   engine = new OfficeEngine();
@@ -33,7 +33,7 @@ export class OfficeRoom extends Room {
     this.onMessage('sync', c => { if(this.permit(c.sessionId)) c.send('snapshot',this.engine.snapshot()); });
     this.clock.setInterval(() => { void this.revalidate(); }, 15000);
     this.onMessage('input', (c, d) => this.permit(c.sessionId) && this.engine.input(c.sessionId, d));
-    for (const type of ['status', 'emote', 'seat', 'meeting', 'game:join', 'game:drop', 'game:reset', 'game:leave', 'chat']) this.onMessage(type, (c, d) => {
+    for (const type of ['status', 'emote', 'jump', 'stand', 'seat', 'bed', 'meeting', 'game:join', 'game:drop', 'game:reset', 'game:leave', 'game:dart', 'game:chess', 'chat']) this.onMessage(type, (c, d) => {
       if (!this.permit(c.sessionId)) return;
       const message = this.engine.action(c.sessionId, type, d);
       if (message) for (const recipient of this.clients) {
@@ -55,7 +55,8 @@ export class OfficeRoom extends Room {
       finally { this.saving.delete(p.id); }
     });
   }
-  async onAuth(c: Client, options: { token?: string }, request: { headers?: { origin?: string } }) {
+  async onAuth(c: Client, options: { token?: string; protocol?: number }, request: { headers?: { origin?: string } }) {
+    if(options.protocol !== PROTOCOL_VERSION) throw new Error('Your office version changed. Reload this page to reconnect.');
     const origin = request.headers?.origin;
     const allowed = (process.env.FRONTEND_ORIGINS || 'http://127.0.0.1:5173,http://localhost:5173').split(',').map(s => s.trim());
     if (origin && !allowed.includes(origin)) throw new Error('This website is not an allowed office client.');

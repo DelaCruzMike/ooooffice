@@ -1,8 +1,8 @@
 # Ooooffice
 
-A standalone, low-poly virtual team office. One floor, eleven rooms/areas plus a central commons, 50 department workstations, a 50-seat meeting room, customizable human characters, temporary chat, optional voice, and Connect Four.
+A standalone, low-poly virtual team office. A high-rise floor with 46 department workstations, a 50-seat tiered auditorium, an 8-seat meeting room, 20 usable beds, an outdoor veranda, a furnished canteen, customizable faceted human characters, and playable darts, chess, and Connect Four.
 
-**Current delivery:** [the public playable preview is live](https://delacruzmike.github.io/ooooffice/) on GitHub Pages. Multiplayer server, Google approval flow, profile persistence, admin tools, and LiveKit integration are implemented, with deployment configuration ready. Live shared office access and real Google/voice verification require the external projects below. All 18 automated tests and the production build pass locally and on GitHub. A 3-minute local test passed with 50 separate clients; the 60-minute soak and real-device/voice pilot remain outstanding.
+**Current delivery:** [the public playable preview is live](https://delacruzmike.github.io/ooooffice/) on GitHub Pages. Multiplayer server, Google approval flow, profile persistence, admin tools, and LiveKit integration are implemented, with deployment configuration ready. Live shared office access and real Google/voice verification require the external projects below. The redesigned release has 29 automated behavior/security tests and a production build. Results are checked before each publication. A 3-minute local test passed with 50 separate clients; the 60-minute soak and real-device/voice pilot remain outstanding.
 
 ## Try the local preview
 
@@ -15,18 +15,19 @@ npm run dev
 
 Open the local URL printed by Vite. No accounts, microphone access, or paid services are needed for this preview. Demo characters are labeled and do not represent connected people. Appearance is saved on this browser only. Preview chat has no remote recipients.
 
-Controls: WASD/arrows to move; drag to rotate; wheel/pinch to zoom; E to sit, stand, or interact with the game table; 1 to wave and 2 to dance. Small screens have a movement joystick and interaction button. Choose a room in the directory to set a walking destination, or open the map to see the whole floor.
+Controls: W/S walk forward/backward; A/D turn; arrow keys are equivalent. The camera follows 3.5 meters behind and pulls inward at obstructions; free orbit and scroll zoom are disabled. Space jumps, E interacts, 1 waves, 2 grooves, and 3 sends a flying kiss. The Emotes menu also includes salute, clap, shuffle, and disco. Small screens have a joystick, Jump, and Interact buttons. The room directory and chat start collapsed; choose a map destination to get a compass to its entrance.
 
 ## Project structure
 
 - `src`: React interface, Babylon scene, voice client, local preview, multiplayer client.
-- `shared`: floor layout, geometry/collision, character types, Connect Four rules, delta synchronization.
+- `shared`: authoritative movement, jumps, seats/beds, independent room locks, all game rules, floor geometry, and delta synchronization. Preview and server use the same engine.
+- `src/render`: reusable furniture builders, city skyline, facade, and faceted articulated characters.
 - `server`: one authoritative Colyseus room; authenticated HTTP APIs; account and voice adapters.
 - `supabase/001_office.sql`: persistent storage migration with no direct browser table access.
 - `.github/workflows/pages.yml` and `render.yaml`: website and server deployment.
 - `tests` and `scripts/loadtest.ts`: behavioral/security tests and an isolated 50-client soak runner.
 
-The room dimensions and initial seat allocations live in `shared/world.ts`. The model uses meters. Configuring this layout changes shared collision and rendering together; rebuild both frontend and server after a layout change. Do not introduce a second server instance or a second office room without shared presence/session coordination.
+The room dimensions and initial seat allocations live in `shared/world.ts`. The model uses meters. Protocol version 2 is required for the revised movement and room state; redeploy the browser and server together. Old clients receive a reload message before authentication. Configuring this layout changes shared collision and rendering together; rebuild both frontend and server after a layout change. Do not introduce a second server instance or a second office room without shared presence/session coordination.
 
 ## Connect the live office
 
@@ -57,7 +58,7 @@ The app never records or starts an egress job. Free voice allowances are finite:
 3. `FRONTEND_ORIGINS` must contain exact **origins**, such as `https://delacruzmike.github.io` (no `/ooooffice/` path). Multiple local/pilot origins can be comma-separated.
 4. The health route is `/health`. The server must support HTTPS and secure WebSockets through Render's public URL. Set the browser's `VITE_SERVER_URL` to that **HTTPS** URL.
 
-Free Render instances sleep after inactivity; the joining interface wakes the server and shows a startup message. Server restarts clear positions, seat claims, messages, meeting locks, and Connect Four. Saved profiles, memberships, and work links remain in Supabase. A restart ends the office visit; use the rejoin control to reconnect. The app does not silently turn the microphone back on after a disconnected visit.
+Free Render instances sleep after inactivity; the joining interface wakes the server and shows a startup message. Server restarts clear positions, seat/bed claims, messages, room locks, and all game sessions. Saved profiles, memberships, and work links remain in Supabase. A restart ends the office visit; use the rejoin control to reconnect. The app does not silently turn the microphone back on after a disconnected visit.
 
 ### 4. GitHub Pages
 
@@ -77,9 +78,13 @@ Published preview: [https://delacruzmike.github.io/ooooffice/](https://delacruzm
 
 The first approved owner signs in with Google, then opens administration from the shield button. Approve teammates by Google email; set departments; optionally appoint administrators; and add HTTPS work links. Work links appear when someone sits at a workstation and open in a separate tab.
 
-Department rooms are open to the approved team. In the meeting room, use Settings → Lock the meeting room. The first member to lock becomes the host; the host leaving/disconnecting unlocks it. Administrators can unlock it remotely. People already inside may leave at any time.
+Department rooms are open to the approved team. The auditorium and small meeting room have independent host/admin locks in Settings. The first member to lock their meeting room becomes its host; leaving or disconnecting releases that room’s host lock. Administrators can unlock either remotely. People already inside may leave at any time.
 
-Connect listening or enable the microphone explicitly. Shared areas use distance-based volume; enclosed rooms use separate server-assigned LiveKit rooms. Settings includes desktop push-to-talk; connect listening first, then hold Space to speak. Deafen silences incoming audio. Individual volume controls are in People. Disconnect voice separately to stop using its connection. Force mute disconnects the target voice session; only that person can enable their microphone again.
+Workstation allocation: Operations 1; Social Media 5; Creator Support 6; Editors 6 (dual monitors); CDT 7; QA 7; Posters 14. The auditorium has five ascending tiers with central ramp access. All 20 sleeping-quarter beds have exclusive temporary claims; lying down never changes availability or creates attendance records.
+
+Darts boards in Social Media and the commons are separate 301 games (three darts per turn, straight-out, turn-start reset on bust). The preview supports solo practice; the live office requires two players. Click/tap the board, or use its arrow-key aiming and Enter to throw. Chess supports local pass-and-play or two live players, with legal moves, castling, en passant, promotion, checkmate and draws validated by chess.js. Connect Four also supports local pass-and-play. Leaving the activity area releases participation. Billiards, bowling, the PS5 and TV are modeled furnishings, not playable simulations in this release.
+
+Connect listening or enable the microphone explicitly. Shared areas use distance-based volume; enclosed rooms use separate server-assigned LiveKit rooms. Settings includes desktop push-to-talk; connect listening first, then hold V to speak; Space is reserved for jumping. Deafen silences incoming audio. Individual volume controls are in People. Disconnect voice separately to stop using its connection. Force mute disconnects the target voice session; only that person can enable their microphone again.
 
 Revocation removes office membership and current access. Removing a participant ends the current visit, while leaving their approved membership intact. Opening the same Google account in another tab/device replaces the first office session. Direct database approval changes are rechecked within 15 seconds; admin-panel revocation also removes active sessions immediately.
 
@@ -94,7 +99,7 @@ npm run loadtest
 LOAD_TEST_SECONDS=180 npm run loadtest
 ```
 
-The load runner generates a temporary test-only credential in memory, binds its own server to localhost, disables external services, connects 50 separate Colyseus clients, rejects a 51st client and anonymous access, sends movement continuously, checks position validity and snapshot freshness, verifies final state convergence, writes `loadtest-report.json`, and stops its server. Its authentication bypass requires all three of `NODE_ENV=test`, `ENABLE_LOAD_TEST=true`, and a matching random key. **Never set those flags on a hosted server.** It does not test Google or voice.
+The load runner generates a temporary test-only credential in memory, binds its own server to localhost, disables external services, connects 50 separate Colyseus clients, rejects a 51st client and anonymous access, sends movement and periodic jumps, checks position validity, jump bounds and snapshot freshness, and verifies final state/landing convergence, writes `loadtest-report.json`, and stops its server. Its authentication bypass requires all three of `NODE_ENV=test`, `ENABLE_LOAD_TEST=true`, and a matching random key. **Never set those flags on a hosted server.** It does not test Google or voice.
 
 Before opening a wider pilot, also complete:
 
@@ -113,3 +118,7 @@ No server credentials belong in GitHub, the frontend, logs, screenshots, or chat
 Voice privacy depends on the LiveKit service acknowledging removals. The server holds a room transition at the boundary if it cannot retire old voice access, and retries cleanup on failures. Enclosed-room isolation is real service-level separation; proximity attenuation in common areas is a listening behavior, not a confidentiality boundary. The server and voice service do not constitute end-to-end encrypted meetings.
 
 The 50-person cap is enforced in one office. Free infrastructure availability, full-day costs, real-device FPS, and 50-person audio quality must be verified in the pilot. Authentication email settings, billing controls, provider quotas, and provider retention policies remain project-owner configuration.
+
+## Local visual QA routes
+
+Development builds only accept `?preview-room=operations` (or another room ID) for a quick in-room start and `?preview-crowd=50` for a local 50-character rendering check. These parameters are compiled out of the production entrypoint. They do not bypass live authentication or create multiplayer participants. Actual mobile-device performance and hosted voice remain pilot checks.
