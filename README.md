@@ -2,7 +2,7 @@
 
 A standalone, low-poly virtual team office. One floor, eleven rooms/areas plus a central commons, 50 department workstations, a 50-seat meeting room, customizable human characters, temporary chat, optional voice, and Connect Four.
 
-**Current delivery:** the local preview is playable. Multiplayer server, Google approval flow, profile persistence, admin tools, and LiveKit integration are implemented, with deployment configuration ready. Public hosting and real Google/voice verification require the external projects below. A short local 50-client test is not certification for full-day 50-person use.
+**Current delivery:** [the public playable preview is live](https://delacruzmike.github.io/ooooffice/) on GitHub Pages. Multiplayer server, Google approval flow, profile persistence, admin tools, and LiveKit integration are implemented, with deployment configuration ready. Live shared office access and real Google/voice verification require the external projects below. All 18 automated tests and the production build pass locally and on GitHub. A 3-minute local test passed with 50 separate clients; the 60-minute soak and real-device/voice pilot remain outstanding.
 
 ## Try the local preview
 
@@ -71,7 +71,7 @@ In Settings → Pages, select **GitHub Actions** as the build source. In Setting
 
 These are intentionally browser-visible identifiers. Do not put service-role keys, Google secrets, or LiveKit secrets here. The workflow tests, builds with the correct repository subpath, and publishes `dist`. A preview-only build also works when these variables are absent; it explicitly reports that team sign-in is not yet connected.
 
-Expected project address, once Pages is enabled and deployment succeeds: `https://delacruzmike.github.io/ooooffice/`. This is an expected address, not evidence of a completed deployment. No purchased domain is required.
+Published preview: [https://delacruzmike.github.io/ooooffice/](https://delacruzmike.github.io/ooooffice/). GitHub Pages is enabled and the deployment was verified in the browser. With service variables absent, the published site deliberately stays in local-preview mode. No purchased domain is required.
 
 ## Use the office
 
