@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {OfficeEngine} from '../shared/engine.js';
-import {DEFAULT_AVATAR,ROOMS,ACTIVITIES,cleanAvatar,makePlayer,stepPlayer,newLocks,newDoors,entrance,roomAt,voiceZone} from '../shared/world.js';
+import {DEFAULT_AVATAR,ROOMS,ACTIVITIES,cleanAvatar,makePlayer,stepPlayer,newLocks,newDoors,entrance,roomAt,voiceZone,relativeInput} from '../shared/world.js';
 import {newPool,newBowling,resolvePool,bowlingFrames,bowlingProgress,finishBowlingRoll} from '../shared/sports.js';
 import {initSports,SportsPhysics} from '../shared/sports-physics.js';
 const engine=()=>{const e=new OfficeEngine();e.add('inside','in','Inside',DEFAULT_AVATAR,'member','Team');e.add('outside','out','Outside',DEFAULT_AVATAR,'member','Team');e.add('admin','admin','Admin',DEFAULT_AVATAR,'administrator','Team');return e;};
@@ -20,3 +20,5 @@ test('entry requests are hidden from unrelated members, expire and cannot reopen
 test('eight ball cannot become legal merely because the last group ball was pocketed in the same shot',()=>{const g=newPool();g.players=['a','b'];g.break=false;g.groups=['solids','stripes'];g.balls.filter(b=>b.id>0&&b.id<9).forEach(b=>b.pocket=1);resolvePool(g,{first:7,rail:true,railBalls:[],pockets:[{id:7,pocket:1},{id:8,pocket:2}],calledBall:8,calledPocket:2,eightAllowed:false});assert.equal(g.winner,'b');});
 test('four-player bowling can finish all ten frames, preserves ties, and awards no phantom bonus rolls',()=>{const g=newBowling();g.players=['a','b','c','d'];for(let i=0;i<80;i++)finishBowlingRoll(g,[]);assert.equal(g.phase,'finished');assert.deepEqual(g.winner,['a','b','c','d']);for(const id of g.players){assert.equal(g.rolls[id].length,20);assert.equal(bowlingFrames(g.rolls[id]).at(-1)!.total,0);}});
 test('leaving a finished pool rack cannot change its winner',()=>{const e=engine();for(const id of['inside','outside'])place(e,id,-6,-.55);for(const id of['inside','outside'])e.action(id,'game:join',{activity:'pool-commons'});e.games.pool.phase='finished';e.games.pool.winner='inside';e.action('inside','game:leave',{activity:'pool-commons'});assert.equal(e.games.pool.winner,'inside');e.dispose();});
+
+test('camera-relative right and forward match the rendered left-handed camera at cardinal headings',()=>{const near=(a:number,b:number)=>assert.ok(Math.abs(a-b)<1e-9);let i=relativeInput(0,1,0);near(i.x,1);near(i.z,0);i=relativeInput(0,1,Math.PI);near(i.x,-1);near(i.z,0);i=relativeInput(1,0,Math.PI);near(i.x,0);near(i.z,-1);i=relativeInput(1,1,0,true);near(Math.hypot(i.x,i.z),1);assert.equal(i.sprint,true);});

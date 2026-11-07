@@ -116,6 +116,7 @@ export function move(p:Vec,direction:Vec,dt:number,locks:Locks|boolean=newLocks(
  for(let i=0;i<steps;i++){const a={x:result.x+direction.x*scale*dist/steps,z:result.z};if(allow(a))result=a;const b={x:result.x,z:result.z+direction.z*scale*dist/steps};if(allow(b))result=b;}return result;
 }
 export type MoveInput={x:number;z:number;sprint?:boolean;heading?:number};
+export function relativeInput(forward:number,right:number,yaw:number,sprint=false):MoveInput{const length=Math.max(1,Math.hypot(forward,right));return {x:(Math.sin(yaw)*forward+Math.cos(yaw)*right)/length,z:(Math.cos(yaw)*forward-Math.sin(yaw)*right)/length,sprint};}
 export function stepPlayer(p:Player,input:MoveInput,dt:number,locks:Locks,doors:Doors={}){
  dt=Math.min(.1,Math.max(0,dt));p.moving=false;if(p.seat||p.bed)return;
  const length=Math.hypot(input.x,input.z);if(length>.05)p.rotation=Math.atan2(input.x,input.z);else if(Number.isFinite(input.heading))p.rotation=Math.atan2(Math.sin(input.heading!),Math.cos(input.heading!));
