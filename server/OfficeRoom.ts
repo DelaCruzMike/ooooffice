@@ -1,7 +1,7 @@
 import { SnapshotDiffer } from '../shared/sync.js';
 import { Room, type Client } from '@colyseus/core';
 import { OfficeEngine } from './engine.js';
-import { authenticate, evictVoice, loadLinks, saveProfile, type Identity } from './services.js';
+import { authenticate, loadTesting, evictVoice, loadLinks, saveProfile, type Identity } from './services.js';
 import { roomAt, voiceZone, cleanAvatar, PROTOCOL_VERSION, type Vec, type Player } from '../shared/world.js';
 export let office: OfficeRoom;
 export class OfficeRoom extends Room {
@@ -30,10 +30,12 @@ export class OfficeRoom extends Room {
     loadLinks().then(links => this.engine.links = links).catch(() => console.warn('Office links unavailable; admin can retry.'));
     this.setSimulationInterval(dt => this.engine.tick(dt / 1000, (p, next) => this.transition(p, next)), 50);
     this.clock.setInterval(() => { const patch = this.differ.diff(this.engine.snapshot()); if (patch) this.broadcast('patch', patch); else this.broadcast('heartbeat', Date.now()); }, 100);
+    if(loadTesting)this.onMessage('test:place',(c,d)=>{const p=this.engine.players.get(c.sessionId);const spots=[{x:-6,z:-.55,room:'lounge'},{x:-6,z:-.55,room:'lounge'},{x:2.8,z:8.5,room:'lounge'},{x:2.8,z:8.5,room:'lounge'},{x:-20.5,z:-13.2,room:'social'},{x:-20.5,z:-10.8,room:'hallway'}];if(p&&Number.isInteger(d?.slot)&&spots[d.slot])Object.assign(p,spots[d.slot],{y:0,grounded:true});});
     this.onMessage('sync', c => { if(this.permit(c.sessionId)) c.send('snapshot',this.engine.snapshot()); });
     this.clock.setInterval(() => { void this.revalidate(); }, 15000);
+    this.clock.setInterval(()=>{for(const c of this.clients)c.send('door:requests',this.engine.requestsFor(c.sessionId));},500);
     this.onMessage('input', (c, d) => this.permit(c.sessionId) && this.engine.input(c.sessionId, d));
-    for (const type of ['status', 'emote', 'jump', 'stand', 'seat', 'bed', 'meeting', 'game:join', 'game:drop', 'game:reset', 'game:leave', 'game:dart', 'game:chess', 'chat']) this.onMessage(type, (c, d) => {
+    for (const type of ['status', 'emote', 'jump', 'stand', 'seat', 'bed', 'meeting', 'game:join', 'game:drop', 'game:reset', 'game:leave', 'game:dart', 'game:chess', 'game:start', 'game:shot', 'game:place', 'door:open', 'door:close', 'door:request', 'door:admit', 'door:dismiss', 'chat']) this.onMessage(type, (c, d) => {
       if (!this.permit(c.sessionId)) return;
       const message = this.engine.action(c.sessionId, type, d);
       if (message) for (const recipient of this.clients) {
@@ -76,6 +78,7 @@ export class OfficeRoom extends Room {
       c.send('snapshot', this.engine.snapshot());
     } finally { release(); if (this.joining.get(userId) === current) this.joining.delete(userId); }
   }
+  onDispose(){this.engine.dispose();}
   async onLeave(c: Client) {
     const zone = this.voiceSessions.get(c.sessionId);
     this.engine.remove(c.sessionId); this.identities.delete(c.sessionId); this.tokens.delete(c.sessionId); this.counts.delete(c.sessionId); this.lastSave.delete(c.sessionId); this.nextVoiceAttempt.delete(c.sessionId);

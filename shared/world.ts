@@ -1,6 +1,7 @@
-export const PROTOCOL_VERSION = 2;
+import { newPool, newBowling, type PoolGame, type BowlingGame } from './sports.js';
+export const PROTOCOL_VERSION = 3;
 export type Vec = { x: number; z: number };
-export type Avatar = { skin: string; hair: string; style: 'crop' | 'bob' | 'bun'; shirt: string; trousers: string; accessory: 'none' | 'glasses' | 'cap' };
+export type Avatar = { skin: string; hair: string; style: 'crop' | 'bob' | 'bun' | 'quiff' | 'ponytail' | 'curls'; shirt: string; trousers: string; accessory: 'none' | 'glasses' | 'cap' | 'headset'; top?:'tshirt'|'polo'|'buttondown'|'hoodie'; bottom?:'trousers'|'jeans'|'shorts'; shoes?:'sneakers'|'office' };
 export type Role = 'owner' | 'administrator' | 'member';
 export const EMOTES = ['wave','salute','clap','kiss','groove','shuffle','disco'] as const;
 export type Emote = '' | typeof EMOTES[number];
@@ -9,7 +10,7 @@ export type Rect = { x: number; z: number; w: number; d: number };
 export type OfficeRoom = Rect & { id: string; name: string; short: string; color: string; seats: number; side: 'north' | 'south' | 'east' | 'west'; enclosed: boolean; doorOffset?:number };
 export const DEFAULT_AVATAR: Avatar = { skin: '#d6a079', hair: '#3b2c28', style: 'crop', shirt: '#7c8871', trousers: '#384a46', accessory: 'none' };
 export const ROOMS: OfficeRoom[] = [
-  {id:'operations',name:'Operations',short:'Operations',x:-32,z:-17,w:9,d:10,color:'#9c896c',seats:1,side:'south',enclosed:true},
+  {id:'operations',name:'Department Manager',short:'Department Manager',x:-32,z:-17,w:9,d:10,color:'#9c896c',seats:1,side:'south',enclosed:true},
   {id:'social',name:'Social Media Managers',short:'Social Media',x:-20.5,z:-17,w:10,d:10,color:'#c29f84',seats:5,side:'south',enclosed:true},
   {id:'csr',name:'Creator Support',short:'Creator Support',x:-8.5,z:-17,w:10,d:10,color:'#91afab',seats:6,side:'south',enclosed:true},
   {id:'editor',name:'Editors',short:'Editors',x:3.5,z:-17,w:10,d:10,color:'#8b9daf',seats:6,side:'south',enclosed:true},
@@ -26,7 +27,7 @@ export const ROOMS: OfficeRoom[] = [
 export const SPAWN: Vec = { x:-5, z:9 };
 export const BOUNDS = { minX:-38,maxX:38,minZ:-28,maxZ:29 };
 export const FLOOR_AREAS:Rect[]=[{x:-8,z:3.5,w:60,d:51},{x:30,z:-18,w:16,d:20},{x:30,z:20.5,w:16,d:17},{x:29,z:2,w:14,d:18}];
-export const SPEED = 3.8, RADIUS = .28, TURN_SPEED = 2.5, GRAVITY = 14;
+export const SPEED = 3.8, SPRINT_SPEED = 6, RADIUS = .28, TURN_SPEED = 2.5, GRAVITY = 14;
 export const MEETING_ROOMS = ['meeting','meeting-small'];
 export type RoomLock = { locked:boolean; host:string|null };
 export type Locks = Record<string,RoomLock>;
@@ -35,6 +36,12 @@ export const inside = (p:Vec,r:Rect,pad=0) => Math.abs(p.x-r.x)<r.w/2+pad && Mat
 export const roomAt = (p:Vec) => ROOMS.find(r=>inside(p,r))?.id ?? 'hallway';
 export const voiceZone = (p:Pick<Player,'room'>) => ROOMS.find(r=>r.id===p.room)?.enclosed?p.room:'commons';
 export function entrance(r:OfficeRoom): Vec { return {x:r.x+(r.side==='west'?-r.w/2:r.side==='east'?r.w/2:(r.doorOffset||0)),z:r.z+(r.side==='north'?-r.d/2:r.side==='south'?r.d/2:(r.doorOffset||0))}; }
+export type DoorState={closed:boolean;until:number};
+export type Doors=Record<string,DoorState>;
+export type EntryRequest={id:string;room:string;visitor:string;name:string;expires:number};
+export const newDoors=():Doors=>Object.fromEntries(ROOMS.filter(r=>r.enclosed).map(r=>[r.id,{closed:false,until:0}]));
+export function doorRect(room:string):Rect{const r=ROOMS.find(r=>r.id===room)!;return {...entrance(r),w:r.side==='north'||r.side==='south'?2.1:.18,d:r.side==='north'||r.side==='south'?.18:2.1};}
+export function doorBlocks(from:Vec,to:Vec,doors:Doors){return Object.entries(doors).some(([id,d])=>d.closed&&roomAt(from)!==id&&roomAt(to)===id);}
 export type Seat = Vec & { id:string; room:string; kind:'desk'|'shared'|'meeting'; rotation:number; y:number };
 export type Bed = Vec & { id:string;room:string;exit:Vec;y:number;rotation:number };
 export type Furniture = Rect & { id:string;kind:string;room:string;rotation?:number;h?:number;monitors?:number;headset?:boolean;count?:number;solid?:boolean };
@@ -70,9 +77,10 @@ prop('table','lounge',-16,.7,2.6,1.4,{h:.5});prop('billiards','lounge',-6,-2.6,4
 prop('chess','lounge',-14,6.5,1.5,1.5,{h:.85});seat('chess-white','lounge',-15.3,6.5,Math.PI/2);seat('chess-black','lounge',-12.7,6.5,-Math.PI/2);
 prop('connect4','lounge',-8.4,5,1.9,1.2,{h:.9});seat('connect4-1','lounge',-8.4,3.8,0);seat('connect4-2','lounge',-8.4,6.2,Math.PI);
 prop('bookshelf','lounge',-20.5,8.5,.65,2,{h:2});
-export type Activity = {id:string;kind:'darts'|'chess'|'connect4';room:string;position:Vec;board:Vec;rotation:number};
+export type Activity = {id:string;kind:'darts'|'chess'|'connect4'|'pool'|'bowling';room:string;position:Vec;board:Vec;rotation:number};
 export const ACTIVITIES:Activity[]=[
- {id:'darts-social',kind:'darts',room:'social',position:{x:-18.7,z:-14},board:{x:-15.8,z:-14},rotation:Math.PI/2},
+ {id:'pool-commons',kind:'pool',room:'lounge',position:{x:-6,z:-.55},board:{x:-6,z:-2.6},rotation:0},
+ {id:'bowling-commons',kind:'bowling',room:'lounge',position:{x:2.8,z:8.5},board:{x:4.9,z:4.5},rotation:0},
  {id:'darts-commons',kind:'darts',room:'lounge',position:{x:5.9,z:-4},board:{x:8.75,z:-4},rotation:Math.PI/2},
  {id:'chess-commons',kind:'chess',room:'lounge',position:{x:-15.3,z:6.5},board:{x:-14,z:6.5},rotation:0},
  {id:'connect4-commons',kind:'connect4',room:'lounge',position:{x:-8.4,z:6.3},board:{x:-8.4,z:5},rotation:0},
@@ -102,21 +110,21 @@ export function groundHeight(p:Vec){
  if(Math.abs(p.x-27)<1) return Math.max(0,Math.min(1,(p.z-18.2)/7.2));
  return Math.max(0,Math.min(4,Math.floor((p.z-17.3)/1.8)))*.25;
 }
-export function move(p:Vec,direction:Vec,dt:number,locks:Locks|boolean=newLocks()){
- const len=Math.hypot(direction.x,direction.z),scale=len>1?1/len:1,dist=Math.min(.1,Math.max(0,dt))*SPEED,steps=Math.max(1,Math.ceil(dist/.12));let result={x:p.x,z:p.z};
- const allow=(q:Vec)=>canStand(q)&&groundHeight(q)-groundHeight(result)<=.301&&!(roomAt(p)!==roomAt(q)&&(typeof locks==='boolean'?locks&&roomAt(q)==='meeting':locks[roomAt(q)]?.locked));
+export function move(p:Vec,direction:Vec,dt:number,locks:Locks|boolean=newLocks(),doors:Doors={},speed=SPEED){
+ const len=Math.hypot(direction.x,direction.z),scale=len>1?1/len:1,dist=Math.min(.1,Math.max(0,dt))*Math.min(SPRINT_SPEED,Math.max(0,speed)),steps=Math.max(1,Math.ceil(dist/.12));let result={x:p.x,z:p.z};
+ const allow=(q:Vec)=>canStand(q)&&!doorBlocks(p,q,doors)&&groundHeight(q)-groundHeight(result)<=.301&&!(roomAt(p)!==roomAt(q)&&(typeof locks==='boolean'?locks&&roomAt(q)==='meeting':locks[roomAt(q)]?.locked));
  for(let i=0;i<steps;i++){const a={x:result.x+direction.x*scale*dist/steps,z:result.z};if(allow(a))result=a;const b={x:result.x,z:result.z+direction.z*scale*dist/steps};if(allow(b))result=b;}return result;
 }
-export type MoveInput={forward:number;turn:number};
-export function stepPlayer(p:Player,input:MoveInput,dt:number,locks:Locks){
+export type MoveInput={x:number;z:number;sprint?:boolean;heading?:number};
+export function stepPlayer(p:Player,input:MoveInput,dt:number,locks:Locks,doors:Doors={}){
  dt=Math.min(.1,Math.max(0,dt));p.moving=false;if(p.seat||p.bed)return;
- p.rotation=Math.atan2(Math.sin(p.rotation+input.turn*TURN_SPEED*dt),Math.cos(p.rotation+input.turn*TURN_SPEED*dt));
- const next=move(p,{x:Math.sin(p.rotation)*input.forward,z:Math.cos(p.rotation)*input.forward},dt,locks);
+ const length=Math.hypot(input.x,input.z);if(length>.05)p.rotation=Math.atan2(input.x,input.z);else if(Number.isFinite(input.heading))p.rotation=Math.atan2(Math.sin(input.heading!),Math.cos(input.heading!));
+ const next=move(p,input,dt,locks,doors,input.sprint?SPRINT_SPEED:SPEED);
  p.moving=Math.hypot(next.x-p.x,next.z-p.z)>.001;Object.assign(p,next);p.room=roomAt(p);
  const floor=groundHeight(p);
  if(p.grounded&&p.y-floor>.31){p.grounded=false;p.vy=0;}
  if(p.grounded){p.y=floor;p.vy=0;}else{p.vy-=GRAVITY*dt;p.y+=p.vy*dt;if(p.y>1.34){p.y=1.34;p.vy=Math.min(0,p.vy);}if(p.y<=floor){p.y=floor;p.vy=0;p.grounded=true;}}
- if(p.moving||Math.abs(input.turn)>.05)p.emote='';
+ if(p.moving)p.emote='';
 }
 export function jumpPlayer(p:Player){if(!p.grounded||p.seat||p.bed)return false;p.vy=Math.sqrt(2*GRAVITY*.8);p.grounded=false;p.emote='';return true;}
 export function cameraBlocked(p:{x:number;y:number;z:number}){return WALLS.some(r=>inside(p,r,.15)&&p.y<3.25)||FURNITURE.some(f=>f.solid!==false&&inside(p,f,.15)&&p.y<(f.h??1)+.12);}
@@ -126,7 +134,7 @@ export function chaseCamera(p:Player){
  const desired=bed?{x:bed.x+(bed.x<30?3.5:-3.5),y:2.98,z:bed.z-.38}:{x:p.x-Math.sin(p.rotation)*3.5,y:Math.min(3.02,p.y+2.05),z:p.z-Math.cos(p.rotation)*3.5};let position=desired;
  for(let t=.08;t<=1;t+=.035){const q={x:target.x+(desired.x-target.x)*t,y:target.y+(desired.y-target.y)*t,z:target.z+(desired.z-target.z)*t};if(cameraBlocked(q)){const safe=Math.max(.07,t-.045);position={x:target.x+(desired.x-target.x)*safe,y:target.y+(desired.y-target.y)*safe,z:target.z+(desired.z-target.z)*safe};break;}}return {target,position};}
 
-export function cleanAvatar(value:unknown):Avatar{const a=value&&typeof value==='object'?value as Record<string,unknown>:{};const color=(key:keyof Avatar)=>typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key] as string)?a[key] as string:DEFAULT_AVATAR[key];return {skin:color('skin'),hair:color('hair'),shirt:color('shirt'),trousers:color('trousers'),style:['crop','bob','bun'].includes(String(a.style))?a.style as Avatar['style']:'crop',accessory:['none','glasses','cap'].includes(String(a.accessory))?a.accessory as Avatar['accessory']:'none'};}
+export function cleanAvatar(value:unknown):Avatar{const a=value&&typeof value==='object'?value as Record<string,unknown>:{};const color=(key:'skin'|'hair'|'shirt'|'trousers')=>typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key] as string)?a[key] as string:DEFAULT_AVATAR[key];return {skin:color('skin'),hair:color('hair'),shirt:color('shirt'),trousers:color('trousers'),top:['tshirt','polo','buttondown','hoodie'].includes(String(a.top))?a.top as Avatar['top']:'tshirt',bottom:['trousers','jeans','shorts'].includes(String(a.bottom))?a.bottom as Avatar['bottom']:'trousers',shoes:a.shoes==='office'?'office':'sneakers',style:['crop','bob','bun','quiff','ponytail','curls'].includes(String(a.style))?a.style as Avatar['style']:'crop',accessory:['none','glasses','cap','headset'].includes(String(a.accessory))?a.accessory as Avatar['accessory']:'none'};}
 export function makePlayer(id:string,name:string,avatar=DEFAULT_AVATAR):Player{return {...SPAWN,id,userId:id,name:name.slice(0,32),department:'Team',role:'member',rotation:Math.PI,y:0,vy:0,grounded:true,moving:false,room:'lounge',status:'available',avatar:cleanAvatar(avatar),emote:'',emoteAt:0,seat:null,bed:null,voice:false,mic:false,forcedMute:false};}
 export type ChatMessage={id:string;author:string;text:string;scope:'office'|'room';room:string;at:number};
 export type WorkLink={label:string;url:string};
@@ -135,9 +143,9 @@ export const newGame=():Game=>({board:Array(42).fill(0),players:[],turn:1,winner
 export function dropDisc(g:Game,p:string,col:number){if(!Number.isInteger(col)||col<0||col>6||g.players.length!==2||g.players[g.turn-1]!==p||g.winner||g.draw)return false;let row=5;while(row>=0&&g.board[row*7+col])row--;if(row<0)return false;g.board[row*7+col]=g.turn;for(const[dx,dy]of[[1,0],[0,1],[1,1],[1,-1]]){let n=1;for(const sign of[-1,1])for(let k=1;k<4;k++){const x=col+dx*k*sign,y=row+dy*k*sign;if(x<0||x>6||y<0||y>5||g.board[y*7+x]!==g.turn)break;n++;}if(n>=4)g.winner=g.turn;}g.draw=!g.winner&&g.board.every(Boolean);if(!g.winner&&!g.draw)g.turn=3-g.turn;return true;}
 export type DartsGame={players:string[];scores:number[];turn:number;darts:number;start:number;winner:string|null;throws:{x:number;y:number;score:number}[]};
 export type ChessGame={players:string[];fen:string;turn:'w'|'b';lastMove:string;history:string[];result:string;winner:string|null};
-export type ActivityGames={connect4:Game;darts:Record<string,DartsGame>;chess:ChessGame};
+export type ActivityGames={connect4:Game;darts:Record<string,DartsGame>;chess:ChessGame;pool:PoolGame;bowling:BowlingGame};
 export const newDarts=():DartsGame=>({players:[],scores:[301,301],turn:0,darts:0,start:301,winner:null,throws:[]});
 export const newChess=():ChessGame=>({players:[],fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',turn:'w',lastMove:'',history:[],result:'',winner:null});
-export const newGames=():ActivityGames=>({connect4:newGame(),darts:{'darts-social':newDarts(),'darts-commons':newDarts()},chess:newChess()});
-export type Snapshot={protocol:number;players:Player[];locks:Locks;games:ActivityGames;links:WorkLink[]};
-export const emptySnapshot=():Snapshot=>({protocol:PROTOCOL_VERSION,players:[],locks:newLocks(),games:newGames(),links:[]});
+export const newGames=():ActivityGames=>({connect4:newGame(),darts:{'darts-commons':newDarts()},chess:newChess(),pool:newPool(),bowling:newBowling()});
+export type Snapshot={protocol:number;players:Player[];locks:Locks;doors:Doors;games:ActivityGames;links:WorkLink[]};
+export const emptySnapshot=():Snapshot=>({protocol:PROTOCOL_VERSION,players:[],locks:newLocks(),doors:newDoors(),games:newGames(),links:[]});

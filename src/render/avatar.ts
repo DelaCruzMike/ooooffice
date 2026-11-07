@@ -11,8 +11,10 @@ export class AvatarRig {
  const a=p.avatar;this.appearance=JSON.stringify(a);this.root=new TransformNode(`person-${p.id}`,art.scene);this.root.position.set(p.x,p.y,p.z);this.root.rotation.y=p.rotation;
  const joint=(name:string,x:number,y:number,z:number,parent=this.root)=>{const n=new TransformNode(name,art.scene);n.parent=parent;n.position.set(x,y,z);return n;};
  const tapered=(name:string,parent:TransformNode,length:number,top:number,bottom:number,color:string)=>{const m=MeshBuilder.CreateCylinder(name,{height:length,diameterTop:top,diameterBottom:bottom,tessellation:6},art.scene);m.position.y=-length/2;m.parent=parent;m.material=art.mat(color);return m;};
+ const bottom=a.bottom||'trousers',legColor=bottom==='jeans'?'#40536a':a.trousers;
  // Angular torso and pelvis, with a narrower waist and shaped shoulders.
  const torso=MeshBuilder.CreateCylinder('faceted shirt',{height:.58,diameterTop:.69,diameterBottom:.49,tessellation:6},art.scene);torso.parent=this.root;torso.position.y=1.14;torso.scaling.set(.9,1,.59);torso.material=art.mat(a.shirt);
+ if(a.top==='polo'||a.top==='buttondown'){for(const side of[-1,1]){const collar=art.box('shirt collar',side*.09,1.43,.14,.13,.045,.13,'#e5e1d3',this.root);collar.rotation.z=side*.4;}if(a.top==='buttondown')for(let i=0;i<5;i++)art.sphere('shirt button',0,1.33-i*.085,.2,.025,'#e5e1d3',this.root);}if(a.top==='hoodie'){art.sphere('hood',0,1.42,-.14,.35,a.shirt,this.root);for(const side of[-1,1])art.box('hoodie drawstring',side*.075,1.3,.2,.018,.22,.02,'#e4e1d0',this.root);art.box('hoodie pouch',0,1.01,.19,.27,.14,.04,a.shirt,this.root);}
  const hips=art.cyl('trouser hips',0,.83,0,.45,.22,a.trousers,this.root,.49);hips.scaling.z=.68;
  art.cyl('neck',0,1.47,0,.13,.17,a.skin,this.root);
  this.head=joint('head',0,1.65,0);const face=art.sphere('angular face',0,0,.015,.36,a.skin,this.head);face.scaling.set(.88,1.22,.9);
@@ -21,17 +23,18 @@ export class AvatarRig {
  const nose=art.sphere('nose',0,-.025,.18,.065,a.skin,this.head);nose.scaling.set(.6,.85,1.1);art.box('mouth',0,-.1,.155,.065,.013,.015,'#8a5946',this.head);
  const hair=art.sphere('faceted hairstyle',0,.12,-.015,.37,a.hair,this.head);hair.scaling.set(1,.7,1.02);
  if(a.style==='bob'){const back=art.sphere('bob hair',0,.02,-.075,.39,a.hair,this.head);back.scaling.set(1,1.03,.74);}
+ if(a.style==='quiff'){const q=art.sphere('swept quiff',0,.25,.09,.26,a.hair,this.head);q.scaling.set(1.2,.8,.8);}if(a.style==='ponytail'){const q=art.sphere('ponytail',0,-.02,-.22,.2,a.hair,this.head);q.scaling.y=2;}if(a.style==='curls')for(let i=0;i<9;i++)art.sphere('curl',Math.sin(i*2.4)*.14,.17+Math.cos(i*2.4)*.06,Math.cos(i*2.4)*.13,.16,a.hair,this.head);
  if(a.style==='bun')art.sphere('hair bun',0,.25,-.07,.18,a.hair,this.head);
  if(a.accessory==='glasses'){for(const s of[-1,1]){art.box('glasses frame',s*.071,.014,.185,.128,.083,.014,'#33453b',this.head);art.box('glasses lens',s*.071,.014,.196,.093,.052,.005,'#acbcb0',this.head);}art.box('glasses bridge',0,.02,.194,.027,.018,.012,'#33453b',this.head);}
  if(a.accessory==='cap'){art.cyl('cap',0,.17,-.01,.38,.12,a.shirt,this.head);art.box('cap peak',0,.14,.17,.35,.035,.22,a.shirt,this.head);}
  this.leftArm=joint('left shoulder',-.29,1.38,0);this.rightArm=joint('right shoulder',.29,1.38,0);
  tapered('left upper sleeve',this.leftArm,.31,.18,.145,a.shirt);tapered('right upper sleeve',this.rightArm,.31,.18,.145,a.shirt);
  this.leftElbow=joint('left elbow',0,-.31,0,this.leftArm);this.rightElbow=joint('right elbow',0,-.31,0,this.rightArm);
- for(const arm of[this.leftElbow,this.rightElbow]){tapered('faceted forearm',arm,.29,.14,.1,a.skin);const hand=art.sphere('hand',0,-.34,.012,.135,a.skin,arm);hand.scaling.set(.75,1.2,.75);art.box('fingers',0,-.39,.012,.075,.09,.075,a.skin,arm);}
+ for(const arm of[this.leftElbow,this.rightElbow]){tapered('faceted forearm',arm,.29,.14,.1,a.top==='hoodie'||a.top==='buttondown'?a.shirt:a.skin);const hand=art.sphere('hand',0,-.34,.012,.135,a.skin,arm);hand.scaling.set(.75,1.2,.75);art.box('fingers',0,-.39,.012,.075,.09,.075,a.skin,arm);}
  this.leftLeg=joint('left hip',-.125,.81,0);this.rightLeg=joint('right hip',.125,.81,0);
- tapered('left thigh',this.leftLeg,.39,.235,.17,a.trousers);tapered('right thigh',this.rightLeg,.39,.235,.17,a.trousers);
+ tapered('left thigh',this.leftLeg,.39,.235,.17,legColor);tapered('right thigh',this.rightLeg,.39,.235,.17,legColor);
  this.leftKnee=joint('left knee',0,-.39,0,this.leftLeg);this.rightKnee=joint('right knee',0,-.39,0,this.rightLeg);
- for(const leg of[this.leftKnee,this.rightKnee]){tapered('lower trouser leg',leg,.34,.17,.125,a.trousers);art.box('shoe',0,-.37,.065,.18,.13,.31,'#dfdfd0',leg);art.box('shoe sole',0,-.435,.065,.19,.025,.32,'#697971',leg);}
+ for(const leg of[this.leftKnee,this.rightKnee]){tapered('lower trouser leg',leg,.34,.17,.125,bottom==='shorts'?a.skin:legColor);art.box('shoe',0,-.37,.065,.18,.13,.31,a.shoes==='office'?'#373632':'#dfdfd0',leg);art.box('shoe sole',0,-.435,.065,.19,.025,.32,'#697971',leg);}
  this.headset=joint('call-center headset',0,0,0,this.head);art.box('headset band',0,.23,0,.43,.045,.12,'#303c42',this.headset);for(const s of[-1,1]){art.box('headset band side',s*.2,.11,0,.045,.28,.12,'#303c42',this.headset);art.box('oversized ear cushion',s*.21,-.01,0,.13,.22,.19,'#26343b',this.headset);}art.box('headset boom',.17,-.08,.2,.04,.035,.35,'#38494d',this.headset);this.headset.setEnabled(false);
  this.heart=joint('flying kiss',0,1.68,.35);for(const s of[-1,1])art.sphere('heart lobe',s*.045,.035,0,.12,'#ce7c7a',this.heart);const tip=art.box('heart point',0,-.02,0,.11,.11,.065,'#ce7c7a',this.heart);tip.rotation.z=Math.PI/4;this.heart.setEnabled(false);
  const shadow=MeshBuilder.CreateGround('character contact shadow',{width:.65,height:.65},art.scene);shadow.material=art.shadowMaterial();shadow.isPickable=false;this.shadow=shadow;
@@ -47,7 +50,7 @@ export class AvatarRig {
  const walk=p.moving&&p.grounded?Math.sin(t*10)*.54:0;
  this.leftArm.rotation.set(walk,0,.08);this.rightArm.rotation.set(-walk,0,-.08);this.leftElbow.rotation.set(-.12-Math.abs(walk)*.25,0,0);this.rightElbow.rotation.copyFrom(this.leftElbow.rotation);
  this.leftLeg.rotation.set(-walk,0,0);this.rightLeg.rotation.set(walk,0,0);this.leftKnee.rotation.set(Math.max(0,walk)*.8,0,0);this.rightKnee.rotation.set(Math.max(0,-walk)*.8,0,0);
- this.headset.setEnabled(p.room==='csr'&&Boolean(p.seat));
+ this.headset.setEnabled(p.avatar.accessory==='headset'||p.room==='csr'&&Boolean(p.seat));
  this.head.rotation.set(0,0,0);this.heart.setEnabled(false);
  if(!p.grounded){this.leftLeg.rotation.x=-.3;this.rightLeg.rotation.x=.18;this.leftKnee.rotation.x=.5;this.rightKnee.rotation.x=.3;this.leftArm.rotation.z=.4;this.rightArm.rotation.z=-.4;}
  if(p.seat){this.root.position.y=p.y-.31;this.leftLeg.rotation.x=this.rightLeg.rotation.x=-Math.PI/2;this.leftKnee.rotation.x=this.rightKnee.rotation.x=Math.PI/2;this.leftArm.rotation.x=this.rightArm.rotation.x=-.4;this.leftElbow.rotation.x=this.rightElbow.rotation.x=-.7;}

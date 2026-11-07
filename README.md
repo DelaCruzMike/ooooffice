@@ -1,8 +1,8 @@
 # Ooooffice
 
-A standalone, low-poly virtual team office. A high-rise floor with 46 department workstations, a 50-seat tiered auditorium, an 8-seat meeting room, 20 usable beds, an outdoor veranda, a furnished canteen, customizable faceted human characters, and playable darts, chess, and Connect Four.
+A standalone, low-poly virtual team office. A high-rise floor with 46 department workstations, a 50-seat tiered auditorium, an 8-seat meeting room, 20 usable beds, an outdoor veranda, a furnished canteen, customizable faceted human characters, and playable darts, chess, Connect Four, eight-ball billiards, and ten-pin bowling.
 
-**Current delivery:** [the public playable preview is live](https://delacruzmike.github.io/ooooffice/) on GitHub Pages. Multiplayer server, Google approval flow, profile persistence, admin tools, and LiveKit integration are implemented, with deployment configuration ready. Live shared office access and real Google/voice verification require the external projects below. The redesigned release has 29 automated behavior/security tests and a production build. Results are checked before each publication. A 3-minute local test passed with 50 separate clients; the 60-minute soak and real-device/voice pilot remain outstanding.
+**Current delivery:** [Ooooffice](https://delacruzmike.github.io/ooooffice/) is hosted on GitHub Pages. Version 0.3 adds mouse free-look, three camera views, sprinting, a centered Q emote wheel, expanded wardrobe, usable privacy doors, and authoritative pool/bowling physics. Supabase and the free Render server are provisioned; Google is enabled and service credentials are configured in the providers' dashboards. The release has 44 automated behavior/security/physics tests. Real-account, real-device, and voice pilot acceptance must be verified separately from simulated traffic. See the verification section below for the recorded capacity result.
 
 ## Try the local preview
 
@@ -15,7 +15,9 @@ npm run dev
 
 Open the local URL printed by Vite. No accounts, microphone access, or paid services are needed for this preview. Demo characters are labeled and do not represent connected people. Appearance is saved on this browser only. Preview chat has no remote recipients.
 
-Controls: W/S walk forward/backward; A/D turn; arrow keys are equivalent. The camera follows 3.5 meters behind and pulls inward at obstructions; free orbit and scroll zoom are disabled. Space jumps, E interacts, 1 waves, 2 grooves, and 3 sends a flying kiss. The Emotes menu also includes salute, clap, shuffle, and disco. Small screens have a joystick, Jump, and Interact buttons. The room directory and chat start collapsed; choose a map destination to get a compass to its entrance.
+Controls: WASD or arrows move relative to the camera. Hold **Left Shift** to sprint (6 m/s; walking is 3.8 m/s). Click the office for mouse free-look; Escape releases the pointer. Browsers that cannot capture it support click-and-drag look. **C** cycles first person, front-facing second person, and third person; the selector saves the chosen view. Third person retains the 3.5-meter distance and obstruction handling. Space jumps, E interacts, and V is optional push-to-talk. Hold **Q**, point at an emote, and release to perform it; release over the center or Escape to cancel. The toolbar supports direct emote selection. Phones have camera drag, a camera selector, joystick, sprint toggle, Jump, and Interact. The minimap is at bottom left with abbreviations, an expandable room legend, and destination guidance. Open panels pause office movement.
+
+Your Look opens a live rotatable character preview: six hairstyles, skin/hair/clothing colors, T-shirt/polo/button-down/hoodie, trousers/jeans/shorts, sneakers/office shoes, and glasses/cap/headset. Existing saved appearances receive compatible defaults; live profiles save in Supabase's existing avatar JSON.
 
 ## Project structure
 
@@ -27,7 +29,7 @@ Controls: W/S walk forward/backward; A/D turn; arrow keys are equivalent. The ca
 - `.github/workflows/pages.yml` and `render.yaml`: website and server deployment.
 - `tests` and `scripts/loadtest.ts`: behavioral/security tests and an isolated 50-client soak runner.
 
-The room dimensions and initial seat allocations live in `shared/world.ts`. The model uses meters. Protocol version 2 is required for the revised movement and room state; redeploy the browser and server together. Old clients receive a reload message before authentication. Configuring this layout changes shared collision and rendering together; rebuild both frontend and server after a layout change. Do not introduce a second server instance or a second office room without shared presence/session coordination.
+The room dimensions and initial seat allocations live in `shared/world.ts`. The model uses meters. Protocol version 3 is required for the camera-relative input, sprint, doors, wardrobe, and sports game state; redeploy the browser and server together. Old clients receive a reload message before authentication. Configuring this layout changes shared collision and rendering together; rebuild both frontend and server after a layout change. Do not introduce a second server instance or a second office room without shared presence/session coordination.
 
 ## Connect the live office
 
@@ -53,7 +55,7 @@ The app never records or starts an egress job. Free voice allowances are finite:
 
 ### 3. Render server
 
-1. Connect the new `ooooffice` GitHub repository to Render and use its `render.yaml` blueprint. Select the free plan only.
+1. The configured server is https://ooooffice-server.onrender.com (Singapore, free plan). A separate installation can use `render.yaml`. Keep one running instance and select the free plan only.
 2. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OWNER_EMAIL`, the three LiveKit variables, and `FRONTEND_ORIGINS`.
 3. `FRONTEND_ORIGINS` must contain exact **origins**, such as `https://delacruzmike.github.io` (no `/ooooffice/` path). Multiple local/pilot origins can be comma-separated.
 4. The health route is `/health`. The server must support HTTPS and secure WebSockets through Render's public URL. Set the browser's `VITE_SERVER_URL` to that **HTTPS** URL.
@@ -62,27 +64,33 @@ Free Render instances sleep after inactivity; the joining interface wakes the se
 
 ### 4. GitHub Pages
 
-Use a **new public repository named `ooooffice`**, separate from existing projects. Copy this directory's contents to the repository root (do not add another nested `ooooffice` directory).
+The existing public repository is https://github.com/DelaCruzMike/ooooffice. Keep this project separate from other applications.
 
-In Settings → Pages, select **GitHub Actions** as the build source. In Settings → Secrets and variables → Actions → **Variables**, set:
+GitHub Actions publishes Pages. The browser defaults to the public identifiers in `src/service-config.ts`; for another installation, override these optional build variables in Settings → Secrets and variables → Actions → Variables:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_SERVER_URL`
 
-These are intentionally browser-visible identifiers. Do not put service-role keys, Google secrets, or LiveKit secrets here. The workflow tests, builds with the correct repository subpath, and publishes `dist`. A preview-only build also works when these variables are absent; it explicitly reports that team sign-in is not yet connected.
+These are intentionally browser-visible identifiers. Do not put service-role keys, Google secrets, or LiveKit secrets here. The workflow tests, builds with the correct repository subpath, and publishes `dist`. Only public identifiers belong in `service-config.ts`. Private keys remain on the server. Independent preview remains available before sign-in.
 
-Published preview: [https://delacruzmike.github.io/ooooffice/](https://delacruzmike.github.io/ooooffice/). GitHub Pages is enabled and the deployment was verified in the browser. With service variables absent, the published site deliberately stays in local-preview mode. No purchased domain is required.
+Published preview: [https://delacruzmike.github.io/ooooffice/](https://delacruzmike.github.io/ooooffice/). GitHub Pages is enabled and the deployment was verified in the browser. Visitors start in independent preview and choose Join your team for Google sign-in and the approved shared office. No purchased domain is required.
 
 ## Use the office
 
 The first approved owner signs in with Google, then opens administration from the shield button. Approve teammates by Google email; set departments; optionally appoint administrators; and add HTTPS work links. Work links appear when someone sits at a workstation and open in a separate tab.
 
-Department rooms are open to the approved team. The auditorium and small meeting room have independent host/admin locks in Settings. The first member to lock their meeting room becomes its host; leaving or disconnecting releases that room’s host lock. Administrators can unlock either remotely. People already inside may leave at any time.
+Department rooms start open. Occupants and administrators can close doors. Outside members request entry; occupants/admins can admit or dismiss the request. Admission opens the door for five seconds, with threshold safety. Requests are private, expire after 30 seconds, and have a ten-second retry cooldown. Empty rooms open automatically. Occupants can always exit; a closed door swings open on exit. Room audio is isolated even with the door open. Closing a door is visual/access privacy, not an audio-routing switch. Open-door admission is not exclusive to the named visitor. The auditorium and small meeting room have independent host/admin locks in Settings. The first member to lock their meeting room becomes its host; leaving or disconnecting releases that room’s host lock. Administrators can unlock either remotely. People already inside may leave at any time.
 
-Workstation allocation: Operations 1; Social Media 5; Creator Support 6; Editors 6 (dual monitors); CDT 7; QA 7; Posters 14. The auditorium has five ascending tiers with central ramp access. All 20 sleeping-quarter beds have exclusive temporary claims; lying down never changes availability or creates attendance records.
+Workstation allocation: Department Manager 1; Social Media 5; Creator Support 6; Editors 6 (dual monitors); CDT 7; QA 7; Posters 14. The auditorium has five ascending tiers with central ramp access. All 20 sleeping-quarter beds have exclusive temporary claims; lying down never changes availability or creates attendance records.
 
-Darts boards in Social Media and the commons are separate 301 games (three darts per turn, straight-out, turn-start reset on bust). The preview supports solo practice; the live office requires two players. Click/tap the board, or use its arrow-key aiming and Enter to throw. Chess supports local pass-and-play or two live players, with legal moves, castling, en passant, promotion, checkmate and draws validated by chess.js. Connect Four also supports local pass-and-play. Leaving the activity area releases participation. Billiards, bowling, the PS5 and TV are modeled furnishings, not playable simulations in this release.
+The sole darts board in the commons uses 301 scoring (three darts per turn, straight-out, turn-start reset on bust). The preview supports solo practice; the live office requires two players. Click/tap the board, or use its arrow-key aiming and Enter to throw. Chess supports local pass-and-play or two live players, with legal moves, castling, en passant, promotion, checkmate and draws validated by chess.js. Connect Four also supports local pass-and-play. Leaving the activity area releases participation. Pool and bowling are playable as described below. The PS5 and TV remain decorative.
+
+Eight-ball has a dedicated 3D view, angle/power aiming, called ball/pocket, solids/stripes, legal breaks, contact/rail fouls, scratches, ball-in-hand placement, and legal/early eight-ball outcomes. The eight is respotted on the break. Two live players confirm each rematch; preview supports local pass-and-play. Spin, jump shots, and masse are excluded. Leaving/disconnecting forfeits an active online rack.
+
+Bowling supports solo practice or one to four live players over ten frames, with starting position, aim, power, and hook controls. Rapier simulates ball/pin collisions and gutters; standing pins persist for the second roll. Scoring includes strikes, spares, tenth-frame bonuses and ties. Leaving skips that bowler; an empty session resets. Spectators can open the game panels nearby. Neither game stores rankings or awards.
+
+Preview and server use the same Rapier physics/rules at fixed 60 Hz, loaded on demand and run only during shots. Online clients submit bounded shot inputs; the server computes all collisions and results and broadcasts snapshots. Games, doors, and room requests are temporary. Server test fixtures are registered only under the existing three-part localhost load-test guard.
 
 Connect listening or enable the microphone explicitly. Shared areas use distance-based volume; enclosed rooms use separate server-assigned LiveKit rooms. Settings includes desktop push-to-talk; connect listening first, then hold V to speak; Space is reserved for jumping. Deafen silences incoming audio. Individual volume controls are in People. Disconnect voice separately to stop using its connection. Force mute disconnects the target voice session; only that person can enable their microphone again.
 
@@ -99,7 +107,7 @@ npm run loadtest
 LOAD_TEST_SECONDS=180 npm run loadtest
 ```
 
-The load runner generates a temporary test-only credential in memory, binds its own server to localhost, disables external services, connects 50 separate Colyseus clients, rejects a 51st client and anonymous access, sends movement and periodic jumps, checks position validity, jump bounds and snapshot freshness, and verifies final state/landing convergence, writes `loadtest-report.json`, and stops its server. Its authentication bypass requires all three of `NODE_ENV=test`, `ENABLE_LOAD_TEST=true`, and a matching random key. **Never set those flags on a hosted server.** It does not test Google or voice.
+The load runner generates a temporary test-only credential in memory, binds its own server to localhost, disables external services, connects 50 separate Colyseus clients, rejects a 51st client and anonymous access, keeps pool and bowling active, exercises door requests/admission, sends walking/sprinting and periodic jumps, checks position validity, jump bounds and snapshot freshness, and verifies final player and office/game state convergence, writes `loadtest-report.json`, and stops its server. Its authentication bypass requires all three of `NODE_ENV=test`, `ENABLE_LOAD_TEST=true`, and a matching random key. **Never set those flags on a hosted server.** It does not test Google or voice.
 
 Before opening a wider pilot, also complete:
 
@@ -110,6 +118,8 @@ Before opening a wider pilot, also complete:
 - A 60-minute 50-client soak on the chosen server and a real group session; verify FPS on named pilot devices rather than claiming universal mobile performance.
 - A restart with active voice participants; confirm all clients disconnect voice when their office connection is lost.
 - Review free-tier usage and projected cost from the real pilot before considering paid hosting.
+
+Capacity run status: the one-hour local simulation is in progress during this implementation; the final report is written to the ignored `loadtest-report.json`. This does not test hosted voice or replace a real-device pilot.
 
 ## Security boundaries and operational limits
 

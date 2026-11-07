@@ -1,8 +1,13 @@
+import SportsPanel from './SportsPanel';
 import { useMemo,useState } from 'react';
 import { Chess,type Square } from 'chess.js';
 import { SEATS,type Snapshot,type Activity } from '../shared/world';
 const symbols:Record<string,string>={wk:'♔',wq:'♕',wr:'♖',wb:'♗',wn:'♘',wp:'♙',bk:'♚',bq:'♛',br:'♜',bb:'♝',bn:'♞',bp:'♟'};
 export default function GamePanel({activity,snapshot,myId,practice,action}:{activity:Activity;snapshot:Snapshot;myId:string;practice:boolean;action:(type:string,data?:Record<string,unknown>)=>void}){
+ if(activity.kind==='pool'||activity.kind==='bowling')return <SportsPanel activity={activity} snapshot={snapshot} myId={myId} practice={practice} action={action}/>;
+ return <BoardGamePanel activity={activity} snapshot={snapshot} myId={myId} practice={practice} action={action}/>;
+}
+function BoardGamePanel({activity,snapshot,myId,practice,action}:{activity:Activity;snapshot:Snapshot;myId:string;practice:boolean;action:(type:string,data?:Record<string,unknown>)=>void}){
  const[selected,setSelected]=useState<Square|null>(null),[promotion,setPromotion]=useState('q'),[dartAim,setDartAim]=useState({x:0,y:0});const game=activity.kind==='darts'?snapshot.games.darts[activity.id]:activity.kind==='chess'?snapshot.games.chess:snapshot.games.connect4;
  const joined=game.players.includes(myId),ready=joined&&(practice||game.players.length===2),send=(type:string,data:Record<string,unknown>={})=>action(type,{...data,activity:activity.id});
  const name=(id:string)=>snapshot.players.find(p=>p.id===id)?.name||'Player';const chess=useMemo(()=>new Chess(snapshot.games.chess.fen),[snapshot.games.chess.fen]);

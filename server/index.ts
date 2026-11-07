@@ -6,12 +6,12 @@ import { Server, matchMaker } from '@colyseus/core';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import { OfficeRoom, office } from './OfficeRoom.js';
 import { authenticate, supabase, livekit, voiceToken, validateLinks, loadTesting, initializeVoice, voiceReady, type Identity } from './services.js';
-import { voiceZone } from '../shared/world.js';
+import { voiceZone, PROTOCOL_VERSION } from '../shared/world.js';
 const app = express(); app.disable('x-powered-by');
 const origins = (process.env.FRONTEND_ORIGINS || 'http://127.0.0.1:5173,http://localhost:5173').split(',').map(s => s.trim());
 app.use(cors({ origin: origins, methods: ['GET', 'POST'], allowedHeaders: ['Authorization', 'Content-Type'] }));
 app.use(express.json({ limit: '16kb' }));
-app.get('/health', (_req, res) => res.json({ ok: true, accounts: Boolean(supabase), voice: Boolean(livekit), voiceReady, loadTesting }));
+app.get('/health', (_req, res) => res.json({ ok: true, protocol: PROTOCOL_VERSION, accounts: Boolean(supabase), voice: Boolean(livekit), voiceReady, loadTesting }));
 type AuthRequest = Request & { identity?: Identity };
 app.use('/api', async (req: AuthRequest, res, next) => {
   try { req.identity = await authenticate(req.headers.authorization?.replace(/^Bearer /, '') || ''); next(); }

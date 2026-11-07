@@ -6,9 +6,9 @@ import { Mesh } from '@babylonjs/core/Meshes/mesh';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial';
 import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTexture';
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
-import { ROOMS,WALLS,FURNITURE,SEATS,BEDS,ACTIVITIES,FLOOR_AREAS,entrance,BOUNDS,type Furniture,type OfficeRoom } from '../../shared/world';
+import { ROOMS,WALLS,FURNITURE,SEATS,BEDS,ACTIVITIES,FLOOR_AREAS,entrance,BOUNDS,type Furniture,type OfficeRoom,type Doors } from '../../shared/world';
 export class OfficeArt {
- mats=new Map<string,StandardMaterial>();private shadowMat?:StandardMaterial;fish:TransformNode[]=[];effects:Mesh[]=[];
+ mats=new Map<string,StandardMaterial>();private shadowMat?:StandardMaterial;doors=new Map<string,TransformNode>();fish:TransformNode[]=[];effects:Mesh[]=[];
  constructor(public scene:Scene){}
  mat(color:string,alpha=1,emissive=false){const key=`${color}-${alpha}-${emissive}`;if(!this.mats.has(key)){const m=new StandardMaterial(key,this.scene);m.diffuseColor=Color3.FromHexString(color);m.specularColor=new Color3(.07,.07,.07);m.alpha=alpha;if(alpha<1)m.backFaceCulling=false;if(emissive){m.emissiveColor=Color3.FromHexString(color);m.disableLighting=true;}this.mats.set(key,m);}return this.mats.get(key)!;}
  shadowMaterial(){if(!this.shadowMat){const tex=new DynamicTexture('soft contact shadow',{width:64,height:64},this.scene,false),ctx=tex.getContext() as CanvasRenderingContext2D;const gradient=ctx.createRadialGradient(32,32,4,32,32,31);gradient.addColorStop(0,'rgba(0,0,0,.42)');gradient.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gradient;ctx.fillRect(0,0,64,64);tex.update();const mat=new StandardMaterial('soft shadow',this.scene);mat.diffuseTexture=tex;mat.opacityTexture=tex;mat.disableLighting=true;mat.emissiveColor=Color3.Black();mat.zOffset=-1;this.shadowMat=mat;}return this.shadowMat;}
@@ -29,7 +29,7 @@ export class OfficeArt {
  // Local +Z is the seated user's side; reverse the object for the opposite row.
  root.rotation.y=(f.rotation||0)===0?Math.PI:0;
  const exec=f.kind==='executive',wood=exec?'#66503c':'#c7b393';this.box('desktop',0,.92,0,f.w,.1,f.d,wood,root);for(const s of[-1,1])this.box('desk pedestal',s*(f.w/2-.15),.44,0,exec?.24:.08,.88,f.d-.12,exec?'#493e34':'#77878a',root);
- for(let i=0;i<(f.monitors||1);i++)this.monitor((i-((f.monitors||1)-1)/2)*.91,-.19,root,(f.monitors||1)===2?.85:1.05);
+ if(exec){const monitor=new TransformNode('corner executive monitor',this.scene);monitor.parent=root;monitor.position.x=-.85;monitor.rotation.y=Math.PI/4;this.monitor(0,-.05,monitor,1);}else for(let i=0;i<(f.monitors||1);i++)this.monitor((i-((f.monitors||1)-1)/2)*.91,-.19,root,(f.monitors||1)===2?.85:1.05);
  this.box('keyboard',0,.99,.21,.62,.035,.2,'#e4e3d8',root);this.box('mouse mat',.55,.98,.2,.28,.018,.25,'#677a7c',root);this.sphere('mouse',.55,1.02,.2,.1,'#d5d8cc',root);
  this.cyl('mug',-f.w/2+.22,1.08,.18,.13,.22,'#d4c4a0',root);this.box('notebook',-.53,.99,.2,.25,.03,.32,'#6f8d85',root);
  if(f.kind==='cubicle'){this.box('back acoustic divider',0,1.26,-.43,f.w,.64,.055,'#899eaa',root);for(const s of[-1,1])this.box('cubicle side divider',s*f.w/2,1.26,0,.055,.64,.87,'#a6b4b9',root);}
@@ -100,10 +100,11 @@ export class OfficeArt {
  this.box('veranda outer safety glass',36,.72,2,.08,1.44,18,'#b0c9c7',undefined,.25);this.box('veranda outer rail',36,1.46,2,.06,.045,18,'#718d8b');
  for(const x of[24,35]){this.box('pergola post',x,1.55,0,.12,3.1,.12,'#a3a896');this.box('pergola beam',x,3.13,2,.14,.14,18,'#adb09b');}for(let z=-6;z<12;z+=1.5)this.box('pergola slat',29,3.14,z,12,.12,.13,'#b2b39d');
  for(const r of ROOMS)this.placard(r);
- this.city();this.batch();
+ this.city();this.batch();for(const r of ROOMS.filter(r=>r.enclosed)){const e=entrance(r),door=new TransformNode('door-'+r.id,this.scene);door.position.set(e.x-1.05,0,e.z);this.box('privacy door panel',1.05,1.48,0,2.05,2.96,.09,'#71857c',door);this.box('door window',1.05,1.95,-.055,1.65,1.05,.025,'#b7caca',door,.6);this.box('door handle',1.87,1.03,-.1,.06,.07,.2,'#d3c8a4',door);this.doors.set(r.id,door);}
  }
  city(){let seed=914;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};for(let i=0;i<85;i++){const angle=i*2.39996,distance=90+rand()*165,x=Math.cos(angle)*distance,z=Math.sin(angle)*distance,height=30+rand()*100,w=8+rand()*10,d=8+rand()*10;const color=['#82989d','#96a7a6','#a2afa9','#758c93'][i%4];this.box('city tower',x,-100+height/2,z,w,height,d,color);this.box('roof cap',x,-100+height+.2,z,w+.2,.4,d+.2,'#6f878d');for(let row=1;row<height/4;row++){for(const sign of[-1,1])this.box('city window band',x,-100+row*4,z+sign*(d/2+.02),w-.8,.9,.03,i%3?'#b7c9c8':'#c7c6aa');}}
  this.box('distant city ground',0,-100,0,700,.4,600,'#9caeaa');}
  batch(){const groups=new Map<StandardMaterial,Mesh[]>();for(const mesh of [...this.scene.meshes]){if(!(mesh instanceof Mesh)||mesh.billboardMode||!mesh.material||mesh.material.name.startsWith('label-')||this.fish.some(f=>mesh.isDescendantOf(f)))continue;const m=mesh.material as StandardMaterial;const list=groups.get(m)||[];list.push(mesh);groups.set(m,list);}for(const list of groups.values())if(list.length>1){const merged=Mesh.MergeMeshes(list,true,true);if(merged)merged.isPickable=false;}for(const mesh of this.scene.meshes)if(!mesh.billboardMode&&!this.fish.some(f=>mesh.isDescendantOf(f)))mesh.freezeWorldMatrix();}
+ syncDoors(doors:Doors){for(const[id,node]of this.doors){const desired=doors[id]?.closed?0:-Math.PI/2;node.rotation.y+=(desired-node.rotation.y)*.25;}}
  animate(t:number,low:boolean){if(low&&Math.floor(t*30)%3)return;for(const f of this.fish){f.position.x=f.metadata.x+Math.sin(t*.8+f.metadata.phase)*.22;f.position.z=f.metadata.z+Math.sin(t+f.metadata.phase)*.12;f.rotation.y=Math.cos(t*.8+f.metadata.phase)>0?0:Math.PI;}}
 }

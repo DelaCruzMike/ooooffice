@@ -1,12 +1,15 @@
+import {publicServices} from './service-config';
 import { applyPatch, type Patch } from '../shared/sync';
 import { emptySnapshot, PROTOCOL_VERSION } from '../shared/world';
 import { createClient, type Session } from '@supabase/supabase-js';
 import { Client, type Room } from 'colyseus.js';
 import type { Room as VoiceRoom, RemoteParticipant } from 'livekit-client';
-import { type Snapshot, type ChatMessage, type Player, type Vec, type WorkLink, voiceZone } from '../shared/world';
-export const configured = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY && import.meta.env.VITE_SERVER_URL);
-export const auth = configured ? createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY) : null;
-export const serverUrl = String(import.meta.env.VITE_SERVER_URL || 'http://127.0.0.1:2567').replace(/\/$/, '');
+import { type Snapshot, type ChatMessage, type Player, type Vec, type WorkLink, type EntryRequest, voiceZone } from '../shared/world';
+const supabaseUrl=import.meta.env.VITE_SUPABASE_URL||publicServices.supabaseUrl;
+const supabaseKey=import.meta.env.VITE_SUPABASE_ANON_KEY||publicServices.supabaseKey;
+export const configured = Boolean(supabaseUrl&&supabaseKey&&(import.meta.env.VITE_SERVER_URL||publicServices.serverUrl));
+export const auth = configured ? createClient(supabaseUrl,supabaseKey) : null;
+export const serverUrl = String(import.meta.env.VITE_SERVER_URL||publicServices.serverUrl).replace(/\/$/,'');
 export async function api(path: string, body?: unknown) {
   const session = (await auth?.auth.getSession())?.data.session;
   if (!session) throw new Error('Please sign in before entering the team office.');
@@ -19,16 +22,16 @@ export class OfficeConnection {
   room?: Room;
   intentional = false;
   unsubscribe?: () => void;
-  async connect(session: Session, handlers: { snapshot: (s: Snapshot, id: string) => void; chat: (m: ChatMessage) => void; notice: (s: string) => void; removed: (s: string) => void; disconnected: () => void; voiceZone: () => void; muted: (s: string) => void }) {
+  async connect(session: Session, handlers: { snapshot: (s: Snapshot, id: string) => void; chat: (m: ChatMessage) => void; notice: (s: string) => void; removed: (s: string) => void; disconnected: () => void; voiceZone: () => void; requests:(r:EntryRequest[])=>void; muted: (s: string) => void }) {
     // Wake a free instance before starting the authenticated matchmaking request.
-    await fetch(`${serverUrl}/health`, { signal: AbortSignal.timeout(90000) }).then(r => { if (!r.ok) throw new Error('The office is still starting.'); });
+    await fetch(`${serverUrl}/health`, { signal: AbortSignal.timeout(90000) }).then(async r => { if (!r.ok) throw new Error('The office is still starting.');const health=await r.json();if(health.protocol&&health.protocol!==PROTOCOL_VERSION)throw new Error('The office is being updated. Reload this page in a moment.');if(!health.accounts)throw new Error('Team sign-in is temporarily unavailable. You can keep exploring the preview.'); });
     const { roomId } = await api('/session', {});
     this.room = await new Client(serverUrl.replace(/^http/, 'ws')).joinById(roomId, { token: session.access_token, protocol: PROTOCOL_VERSION });
     let latest: Snapshot = emptySnapshot();
     this.room.onMessage('snapshot', (s: Snapshot) => { if(s.protocol!==PROTOCOL_VERSION){handlers.removed('Your office version changed. Reload this page.');return;} latest=s; handlers.snapshot(s,this.room!.sessionId); });
     this.room.onMessage('patch', (p: Patch) => { latest=applyPatch(latest,p); handlers.snapshot(latest,this.room!.sessionId); });
     this.room.onMessage('heartbeat', () => {});
-    this.room.onMessage('chat', handlers.chat); this.room.onMessage('notice', handlers.notice);
+    this.room.onMessage('door:requests',handlers.requests);this.room.onMessage('chat', handlers.chat); this.room.onMessage('notice', handlers.notice);
     this.room.onMessage('removed', (text: string) => { this.intentional = true; handlers.removed(text); });
     this.room.onMessage('voice:zone', handlers.voiceZone); this.room.onMessage('voice:muted', handlers.muted);
     this.room.onLeave(() => { if (!this.intentional) handlers.disconnected(); });
