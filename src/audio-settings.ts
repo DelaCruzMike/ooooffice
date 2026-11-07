@@ -1,5 +1,5 @@
-export type AudioSettings={input:string;output:string;gain:number;master:number;voice:number;environment:number;ui:number;activation:boolean;threshold:number};
-export const DEFAULT_AUDIO:AudioSettings={input:'default',output:'default',gain:1,master:1,voice:1,environment:1,ui:1,activation:false,threshold:.025};
+export type AudioSettings={input:string;output:string;gain:number;master:number;voice:number;environment:number;music:number;ui:number;activation:boolean;threshold:number};
+export const DEFAULT_AUDIO:AudioSettings={input:'default',output:'default',gain:1,master:1,voice:1,environment:1,music:.5,ui:1,activation:false,threshold:.025};
 export function loadAudio():AudioSettings{try{return {...DEFAULT_AUDIO,...JSON.parse(localStorage.getItem('ooooffice.audio')||'{}')};}catch{return {...DEFAULT_AUDIO};}}
 export class MicrophoneProcessor{
  name='Office input gain and voice gate';processedTrack?:MediaStreamTrack;private nodes:AudioNode[]=[];private timer?:ReturnType<typeof setInterval>;

@@ -37,11 +37,11 @@ jobs:
             try {
               const response = await fetch(url + '/health', {signal: AbortSignal.timeout(5000)});
               const health = await response.json();
-              if (response.ok && health.ok && health.protocol === 5) process.exit(0);
+              if (response.ok && health.ok && health.protocol === 6) process.exit(0);
             } catch {}
             await new Promise(resolve => setTimeout(resolve, 5000));
           }
-          throw new Error('Protocol-5 backend is not ready; frontend publication stopped.');
+          throw new Error('Protocol-6 backend is not ready; frontend publication stopped.');
           NODE
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

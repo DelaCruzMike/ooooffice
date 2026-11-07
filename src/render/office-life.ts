@@ -1,0 +1,26 @@
+import {TransformNode} from '@babylonjs/core/Meshes/transformNode';
+import {floorConfig,floorRooms,floorFurniture,type FloorId} from '../../shared/building';
+import type {OfficeArt} from './art';
+export function glass(a:OfficeArt,x:number,z:number,w:number,d:number,h:number){a.box('readable glass',x,h/2,z,w,h,d,'#8dbac3',undefined,.24);const horizontal=w>d,length=Math.max(w,d);for(let i=0;i<=Math.ceil(length/3);i++){const offset=(i/Math.ceil(length/3)-.5)*length;a.box('glazing mullion',x+(horizontal?offset:0),h/2,z+(horizontal?0:offset),.07,h,.07,'#61787a');}a.box('glass base rail',x,.12,z,w,.24,d,'#637c7d');}
+export function decorateFloor(a:OfficeArt,floor:FloorId){for(const [i,f] of floorFurniture(floor).filter(f=>['desk','cubicle','executive'].includes(f.kind)).entries()){const side=i%2?1:-1;a.cyl('coffee cup',f.x+side*.65,.88,f.z,.13,.18,'#e8dfc9');a.box('filing tray',f.x-side*.65,.8,f.z,.28,.06,.22,'#5f7d80');a.box('paper stack',f.x-side*.65,.85,f.z,.24,.04,.19,'#dddccd');a.box('cable management',f.x,.3,f.z,.9,.05,.08,'#4b5e62');}
+for(const [index,r] of floorRooms(floor).entries()){
+ const rear=r.side==='north'?r.z+r.d/2-.16:r.z-r.d/2+.16;
+ a.text(r.id==='it-sleeping'?'QUIET ZONE · REST & RECHARGE':r.id.includes('server')?'NETWORK OPERATIONS':r.id.includes('qa')?'REVIEW · QUALITY · CARE':r.id.includes('editor')?'CREATE · EDIT · DELIVER':r.id.includes('cdt')?'DISTRIBUTION · DAILY CHECKLIST':r.id.includes('pantry')?'A LITTLE BREAK':r.id.includes('veranda')?'TAKE A BREATH':'TOGETHER, ABOVE THE EVERYDAY',r.x,2.8,rear,Math.min(5,r.w-2),.35,'#4d6663','#e4e0ce',r.side==='north'?0:Math.PI);
+ // Wall-mounted details stay above circulation and collision bounds.
+ a.box('pinboard frame',r.x-r.w/2+1.5,1.8,rear,1.5,1,.08,'#9e8765');for(let i=0;i<3;i++)a.box('pinned notice',r.x-r.w/2+1.05+i*.4,1.8,rear+(r.side==='north'?-.06:.06),.28,.65,.02,['#dfd3b1','#b7cfcc','#d0bdca'][i]);
+ a.cyl('wall clock',r.x+r.w/2-1.3,2.45,rear,.48,.05,'#ece8d9').rotation.x=Math.PI/2;a.text('10 : 10',r.x+r.w/2-1.3,2.45,rear+(r.side==='north'?-.05:.05),.4,.14,'#425951','',r.side==='north'?0:Math.PI);
+ if(r.seats){a.box('framed department art',r.x+2,2.1,rear,1.5,1.1,.06,index%2?'#8ea8aa':'#ac9878');a.text(r.id.includes('manager')?'LEAD WITH CARE':r.id.includes('krams')?'EA · KRAMS':r.id.includes('augustine')?'EA · AUGUSTINE':'GOOD WORK, TOGETHER',r.x+2,2.1,rear+(r.side==='north'?-.05:.05),1.3,.6,'#fff5df','',r.side==='north'?0:Math.PI);}
+ }
+ if(floor==='G'){const h=7;for(const x of[-19,19])for(const z of[-8,1,13])a.plant(x,z,1.7);for(const x of[-15,15]){a.cyl('floor lamp',x,1.3,1,.05,2.6,'#6a7262');a.cyl('lamp shade',x,2.5,1,.7,.5,'#e4d8ad',undefined,.4);a.cyl('lamp foot',x,.05,1,.5,.1,'#6a7262');}a.text('DEPARTMENT DIRECTORY\nG Lobby · 1 IT · 2 Admin / HR\n3 Social Media · 4 Sales',10,2.5,-8.8,3.4,.8,'#e6eadb','#405952',Math.PI);a.box('reception slatted wall',10,2.8,-9.1,10,5.6,.2,'#a98b64');for(let i=0;i<30;i++)a.box('oak slat',5.2+i*.33,2.8,-8.95,.12,5.6,.12,'#927450');a.text('ooooffice',10,4.3,-8.8,6,1,'#faf1d6','',Math.PI);
+ for(const x of[10,12,14,16,18]){a.cyl('bar stool seat',x,.8,-11.3,.65,.15,'#819386');a.cyl('bar stool stem',x,.4,-11.3,.09,.8,'#526b68');}
+ a.cyl('umbrella stand',19,.45,-3,.55,.9,'#728681');for(let i=0;i<3;i++)a.cyl('umbrella',19+(i-1)*.12,.85,-3,.06,1.1,'#344f5b');for(const x of[-19,19])a.cyl('lobby bin',x,.45,14,.65,.9,'#6b8278');
+ for(const x of[-7,0,7]){a.cyl('pendant cable',x,h-1.3,2,.025,2,'#6b7165');a.sphere('pendant globe',x,h-2.3,2,.7,'#f3dfb0');}
+ }
+}
+export function cityBackdrop(a:OfficeArt,floor:FloorId){const b=floorConfig(floor).bounds,ground=floor==='G'?-.2:-22;
+ a.box('city ground',b.x,ground- .3,90,220,.5,170,'#99a69a');a.box('corporate road',b.x,ground,48,190,.08,13,'#647475');a.box('sidewalk',b.x,ground+.1,38,190,.2,6,'#bec4b8');for(let i=0;i<20;i++)a.box('road lane marking',-75+i*9,ground+.06,48,4,.015,.16,'#e4dec2');
+ for(let i=0;i<22;i++){const x=-78+(i%11)*18,z=65+Math.floor(i/11)*35,height=12+(i*17%43);a.box('corporate tower',x,ground+height/2,z,12,height,16,['#839b9c','#a3b2ae','#71898e'][i%3]);for(let y=3;y<height;y+=4)a.box('window ribbon',x,ground+y,z-8.05,10,1.1,.06,i%2?'#b7ced0':'#dbd5ae');a.box('roof cap',x,ground+height,z,12.4,.25,16.4,'#637f84');}
+ if(floor==='G')for(let i=0;i<8;i++){const x=-65+i*18;a.cyl('streetlight pole',x,2.7,36,.12,5.4,'#526966');a.box('street luminaire',x,5.4,36,1,.12,.5,'#e8e1bd');a.plant(x+5,36,2.2);}
+ for(let i=0;i<4;i++){const root=new TransformNode('background vehicle',a.scene);root.position.set(-55+i*34,ground,46+(i%2)*4);a.box('vehicle',0,.65,0,3.7,.8,1.7,['#b4bcae','#7c999c','#b69f8a','#5e737d'][i],root);a.box('vehicle windows',0,1.2,0,2,.65,1.5,'#a7c3c6',root);for(const x of[-1.2,1.2])for(const z of[-.8,.8]){const wheel=a.cyl('wheel',x,.32,z,.6,.16,'#344448',root);wheel.rotation.x=Math.PI/2;}a.ambient.push({root,base:root.position.x,axis:'x',amplitude:20,speed:.06+i*.015});}
+ if(floor==='G')for(let i=0;i<5;i++){const root=new TransformNode('street pedestrian',a.scene);root.position.set(-35+i*17,0,35);a.box('pedestrian coat',0,1.1,0,.45,.8,.3,'#788c87',root);a.sphere('pedestrian head',0,1.7,0,.32,'#bd9b78',root);for(const x of[-.12,.12])a.box('pedestrian leg',x,.4,0,.14,.8,.15,'#566b6b',root);a.ambient.push({root,base:root.position.x,axis:'x',amplitude:5,speed:.09});}
+}

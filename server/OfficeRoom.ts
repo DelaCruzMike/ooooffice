@@ -1,4 +1,6 @@
-import {FLOOR_IDS,floorConfig,type FloorId,allRooms,mayEnter,resolveVoice,floorRoomAt,roomFloor} from '../shared/building.js';
+import {entrance} from '../shared/world.js';
+import {canReceiveChat} from '../shared/chat.js';
+import {FLOOR_IDS,floorConfig,floorRooms,type FloorId,allRooms,mayEnter,resolveVoice,floorRoomAt,roomFloor} from '../shared/building.js';
 import {cleanRoomSettings} from '../shared/room-settings.js';
 import { SnapshotDiffer } from '../shared/sync.js';
 import { Room, type Client } from '@colyseus/core';
@@ -44,7 +46,7 @@ export class OfficeRoom extends Room {
     loadLinks().then(links => this.engine.links = links).catch(() => console.warn('Office links unavailable; admin can retry.'));
     this.setSimulationInterval(dt => this.simulate(dt / 1000), 50);
     this.clock.setInterval(() => { void this.reconcileVoice();const snapshot=this.engine.snapshot();for(const client of this.clients){let differ=this.differs.get(client.sessionId);if(!differ){differ=new SnapshotDiffer();this.differs.set(client.sessionId,differ);}const patch=differ.diff(this.engine.snapshotFor(client.sessionId,snapshot));if(patch){if(loadTesting)this.metrics.patchBytes+=Buffer.byteLength(JSON.stringify(patch));client.send('patch',patch);}} }, 100);
-    if(loadTesting){this.onMessage('test:building',(c,d)=>{const p=this.engine.players.get(c.sessionId);if(!p||!FLOOR_IDS.includes(d?.floor))return;const floor=d.floor as FloorId;Object.assign(p,{floor,floors:['1','2','3','4'],approved:true,inElevator:false,seat:null,bed:null,...(d.landing?floorConfig(floor).landing:floorConfig(floor).spawn)});p.room=floorRoomAt(p,floor);});this.onMessage('test:metrics',c=>c.send('test:metrics',{...this.metrics,memory:process.memoryUsage(),players:this.engine.players.size}));}
+    if(loadTesting){this.onMessage('test:building',(c,d)=>{const p=this.engine.players.get(c.sessionId);if(!p||!FLOOR_IDS.includes(d?.floor))return;const floor=d.floor as FloorId;Object.assign(p,{floor,floors:['1','2','3','4'],approved:true,inElevator:false,seat:null,bed:null,...(d.landing?floorConfig(floor).landing:floorConfig(floor).spawn)});const r=floorRooms(floor).find(r=>r.id===d.room);if(r){const e=entrance(r);Object.assign(p,{x:e.x,z:e.z+(r.side==='south'?-1.2:1.2)});}p.room=floorRoomAt(p,floor);});this.onMessage('test:metrics',c=>c.send('test:metrics',{...this.metrics,memory:process.memoryUsage(),players:this.engine.players.size}));}
     if(loadTesting)this.onMessage('test:place',(c,d)=>{const p=this.engine.players.get(c.sessionId);const spots=[{x:-6,z:-.55,room:'lounge'},{x:-6,z:-.55,room:'lounge'},{x:2.8,z:8.5,room:'lounge'},{x:2.8,z:8.5,room:'lounge'},{x:-20.5,z:-13.2,room:'social'},{x:-20.5,z:-10.8,room:'hallway'}];if(p&&Number.isInteger(d?.slot)&&spots[d.slot])Object.assign(p,spots[d.slot],{y:0,grounded:true});});
     this.onMessage('sync', c => { if(this.permit(c.sessionId)) this.sendSnapshot(c); });
     this.clock.setInterval(() => { void this.revalidate(); }, 15000);
@@ -56,7 +58,7 @@ export class OfficeRoom extends Room {
       const before=structuredClone(this.engine.doors);const message = this.engine.action(c.sessionId, type, d);this.coordinateDoors(before);
       if (message) for (const recipient of this.clients) {
         const p = this.engine.players.get(recipient.sessionId);
-        if (p?.floor===this.engine.players.get(c.sessionId)?.floor && p?.inElevator===this.engine.players.get(c.sessionId)?.inElevator && (message.scope === 'office' || p?.room === message.room)) recipient.send('chat', message);
+        if (p && canReceiveChat(p,message)) recipient.send('chat', message);
       }
     });
     this.onMessage('auth:refresh', async (c, d) => {

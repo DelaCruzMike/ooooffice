@@ -1,10 +1,10 @@
-import {floorStep,allRooms,IT_ROOMS,type FloorId} from './building.js';
+import {floorStep,floorBeds,allRooms,IT_ROOMS,type FloorId} from './building.js';
 import {newElevator,type ElevatorState} from './elevator.js';
 import type {NpcState} from './npcs.js';
 import {cleanCosmetics,type Cosmetics} from './cosmetics.js';
 import type {RoomSettingsMap} from './room-settings.js';
 import { newPool, newBowling, type PoolGame, type BowlingGame } from './sports.js';
-export const PROTOCOL_VERSION = 5;
+export const PROTOCOL_VERSION = 6;
 export type Vec = { x: number; z: number };
 export type Avatar = { cosmetics?:Cosmetics; skin: string; hair: string; style: 'crop' | 'bob' | 'bun' | 'quiff' | 'ponytail' | 'curls'; shirt: string; trousers: string; accessory: 'none' | 'glasses' | 'cap' | 'headset'; top?:'tshirt'|'polo'|'buttondown'|'hoodie'; bottom?:'trousers'|'jeans'|'shorts'; shoes?:'sneakers'|'office' };
 export type Role = 'owner' | 'administrator' | 'member';
@@ -12,7 +12,7 @@ export const EMOTES = ['wave','salute','clap','kiss','groove','shuffle','disco']
 export type Emote = '' | typeof EMOTES[number];
 export type Player = Vec & { floor:FloorId;approved:boolean;floors:FloorId[];managedFloors:FloorId[];inElevator:boolean; id: string; userId: string; name: string; department: string; role: Role; rotation: number; y: number; vy: number; grounded: boolean; moving: boolean; room: string; status: 'available' | 'busy' | 'away'; avatar: Avatar; emote: Emote; emoteAt: number; seat: string | null; bed: string | null; voice: boolean; mic: boolean; forcedMute: boolean };
 export type Rect = { x: number; z: number; w: number; d: number };
-export type OfficeRoom = Rect & { id: string; name: string; short: string; color: string; seats: number; side: 'north' | 'south' | 'east' | 'west'; enclosed: boolean; doorOffset?:number };
+export type OfficeRoom = Rect & { id: string; name: string; short: string; color: string; seats: number; side: 'north' | 'south' | 'east' | 'west'; enclosed: boolean; doorOffset?:number;roomType?:string;npcAccess?:string[] };
 export const DEFAULT_AVATAR: Avatar = { skin: '#d6a079', hair: '#3b2c28', style: 'crop', shirt: '#7c8871', trousers: '#384a46', accessory: 'none' };
 export const ROOMS: OfficeRoom[] = [
   {id:'operations',name:'Department Manager',short:'Department Manager',x:-32,z:-17,w:9,d:10,color:'#9c896c',seats:1,side:'south',enclosed:true},
@@ -136,14 +136,14 @@ export function stepPlayer(p:Player,input:MoveInput,dt:number,locks:Locks,doors:
 export function jumpPlayer(p:Player){if(!p.grounded||p.seat||p.bed)return false;p.vy=Math.sqrt(2*GRAVITY*.8);p.grounded=false;p.emote='';return true;}
 export function cameraBlocked(p:{x:number;y:number;z:number}){return WALLS.some(r=>inside(p,r,.15)&&p.y<3.25)||FURNITURE.some(f=>f.solid!==false&&inside(p,f,.15)&&p.y<(f.h??1)+.12);}
 export function chaseCamera(p:Player){
- const bed=BEDS.find(b=>b.id===p.bed);
+ const bed=floorBeds(p.floor).find(b=>b.id===p.bed);
  const target=bed?{x:bed.x,y:bed.y+.4,z:bed.z-.78}:{x:p.x,y:p.y+(p.seat?1.05:1.12),z:p.z};
  const desired=bed?{x:bed.x+(bed.x<30?3.5:-3.5),y:2.98,z:bed.z-.38}:{x:p.x-Math.sin(p.rotation)*3.5,y:Math.min(3.02,p.y+2.05),z:p.z-Math.cos(p.rotation)*3.5};let position=desired;
  for(let t=.08;t<=1;t+=.035){const q={x:target.x+(desired.x-target.x)*t,y:target.y+(desired.y-target.y)*t,z:target.z+(desired.z-target.z)*t};if(cameraBlocked(q)){const safe=Math.max(.07,t-.045);position={x:target.x+(desired.x-target.x)*safe,y:target.y+(desired.y-target.y)*safe,z:target.z+(desired.z-target.z)*safe};break;}}return {target,position};}
 
 export function cleanAvatar(value:unknown):Avatar{const a=value&&typeof value==='object'?value as Record<string,unknown>:{};const color=(key:'skin'|'hair'|'shirt'|'trousers')=>typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key] as string)?a[key] as string:DEFAULT_AVATAR[key];return {cosmetics:cleanCosmetics(a.cosmetics),skin:color('skin'),hair:color('hair'),shirt:color('shirt'),trousers:color('trousers'),top:['tshirt','polo','buttondown','hoodie'].includes(String(a.top))?a.top as Avatar['top']:'tshirt',bottom:['trousers','jeans','shorts'].includes(String(a.bottom))?a.bottom as Avatar['bottom']:'trousers',shoes:a.shoes==='office'?'office':'sneakers',style:['crop','bob','bun','quiff','ponytail','curls'].includes(String(a.style))?a.style as Avatar['style']:'crop',accessory:['none','glasses','cap','headset'].includes(String(a.accessory))?a.accessory as Avatar['accessory']:'none'};}
 export function makePlayer(id:string,name:string,avatar=DEFAULT_AVATAR):Player{return {floor:'3',approved:true,floors:['3'],managedFloors:[],inElevator:false,...SPAWN,id,userId:id,name:name.slice(0,32),department:'Team',role:'member',rotation:Math.PI,y:0,vy:0,grounded:true,moving:false,room:'lounge',status:'available',avatar:cleanAvatar(avatar),emote:'',emoteAt:0,seat:null,bed:null,voice:false,mic:false,forcedMute:false};}
-export type ChatMessage={floor:FloorId;cabin:boolean;id:string;author:string;text:string;scope:'office'|'room';room:string;at:number};
+export type ChatMessage={zone:string;floor:FloorId;cabin:boolean;id:string;author:string;text:string;scope:'office'|'room';room:string;at:number};
 export type WorkLink={label:string;url:string};
 export type Game={board:number[];players:string[];turn:number;winner:number|null;draw:boolean};
 export const newGame=():Game=>({board:Array(42).fill(0),players:[],turn:1,winner:null,draw:false});

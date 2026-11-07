@@ -26,8 +26,8 @@ export class OfficeConnection {
   unsubscribe?: () => void;
   async connect(session: Session, handlers: { snapshot: (s: Snapshot, id: string) => void; chat: (m: ChatMessage) => void; notice: (s: string) => void; removed: (s: string) => void; disconnected: () => void; voiceZone: () => void; requests:(r:EntryRequest[])=>void; muted: (s: string) => void }) {
     // Wake a free instance before starting the authenticated matchmaking request.
-    await fetch(`${serverUrl}/health`, { signal: AbortSignal.timeout(90000) }).then(async r => { if (!r.ok) throw new Error('The office is still starting.');const health=await r.json();if(health.protocol&&health.protocol!==PROTOCOL_VERSION)throw new Error('The office is being updated. Reload this page in a moment.');if(!health.accounts)throw new Error('Team sign-in is temporarily unavailable. You can keep exploring the preview.'); });
-    const { roomId } = await api('/session', {});
+    await fetch(`${serverUrl}/health`, { signal: AbortSignal.timeout(90000) }).then(async r => { if (!r.ok) throw new Error('The office is still starting.');const health=await r.json();if(health.protocol&&health.protocol!==PROTOCOL_VERSION)throw new Error('The office is being updated. Reload this page in a moment.');if(!health.accounts&&!(import.meta.env.DEV&&health.loadTesting&&location.hostname==='127.0.0.1'))throw new Error('Team sign-in is temporarily unavailable. You can keep exploring the preview.'); });
+    const reservation=await fetch(`${serverUrl}/api/session`,{method:'POST',headers:{Authorization:`Bearer ${session.access_token}`,'Content-Type':'application/json'},body:'{}'});const {roomId,error}=await reservation.json();if(!reservation.ok)throw new Error(error||'Could not join the office.');
     this.room = await new Client(serverUrl.replace(/^http/, 'ws')).joinById(roomId, { token: session.access_token, protocol: PROTOCOL_VERSION });
     let latest: Snapshot = emptySnapshot();
     this.room.onMessage('snapshot', (s: Snapshot) => { if(s.protocol!==PROTOCOL_VERSION){handlers.removed('Your office version changed. Reload this page.');return;} latest=s; handlers.snapshot(s,this.room!.sessionId); });

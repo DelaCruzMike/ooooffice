@@ -1,6 +1,7 @@
+import {chatZone,cleanChat} from './chat.js';
 import {Elevator} from './elevator.js';
 import {NpcSystem} from './npcs.js';
-import {allRooms,floorCanStand,floorSeats,mayEnter,mayManageFloor,roomFloor,floorRoomAt,floorConfig,resolveVoice} from './building.js';
+import {allRooms,floorBeds,floorCanStand,floorSeats,mayEnter,mayManageFloor,roomFloor,floorRoomAt,floorConfig,resolveVoice} from './building.js';
 import {dartLanding} from './aim.js';
 import {cleanRoomSettings,type RoomSettingsMap} from './room-settings.js';
 import {newPool,newBowling,rackPins,groupOf,bowlingProgress,type PoolGame,type BowlingGame} from './sports.js';
@@ -43,7 +44,7 @@ export class OfficeEngine {
  private isPlaying(id:string,a:Activity){return (a.kind==='darts'?this.games.darts[a.id].players:a.kind==='chess'?this.games.chess.players:a.kind==='pool'?this.games.pool.players:a.kind==='bowling'?this.games.bowling.players:this.games.connect4.players).includes(id);}
  private leaveGame(id:string,a:Activity){if(!this.isPlaying(id,a))return;if(a.kind==='pool'){const g=this.games.pool;this.physics?.stopPool();if(g.phase!=='finished'){g.phase='finished';g.winner=g.players.find(p=>p!==id)||null;g.message='Opponent left. Rack forfeited.';}g.players=g.players.filter(p=>p!==id);if(!g.players.length)this.games.pool=newPool();return;}if(a.kind==='bowling'){const g=this.games.bowling,index=g.players.indexOf(id);if(index===g.turn){this.physics?.stopBowling();if(g.phase==='rolling')g.phase='aim';g.pins=rackPins();}g.players.splice(index,1);if(index<g.turn)g.turn--;g.turn%=Math.max(1,g.players.length);if(!g.players.length)this.games.bowling=newBowling();return;}if(a.kind==='darts')this.games.darts[a.id]=newDarts();else if(a.kind==='chess')this.games.chess=newChess();else this.games.connect4=newGame();}
  private leaveGames(id:string){for(const a of ACTIVITIES)this.leaveGame(id,a);}
- private stand(p:Player){const bed=BEDS.find(b=>b.id===p.bed);const candidates:Vec[]=bed?[bed.exit]:[];
+ private stand(p:Player){const bed=floorBeds(p.floor).find(b=>b.id===p.bed);const candidates:Vec[]=bed?[bed.exit]:[];
   for(const radius of [.4,.7,1,1.4,1.8,2.4,3])for(let angle=0;angle<Math.PI*2;angle+=Math.PI/8)candidates.push({x:p.x+Math.sin(angle)*radius,z:p.z+Math.cos(angle)*radius});
   const exit=candidates.find(q=>floorCanStand(q,p.floor)&&floorRoomAt(q,p.floor)===p.room&&(p.floor!=='3'||Math.abs(groundHeight(q)-groundHeight(p))<.35));if(!exit)return;
   Object.assign(p,exit,{y:p.floor==='3'?groundHeight(exit):0,vy:0,grounded:true,seat:null,bed:null,emote:'',moving:false});
@@ -59,7 +60,7 @@ export class OfficeEngine {
   if(type==='emote'&&p.grounded&&!p.seat&&!p.bed&&(['',...EMOTES] as string[]).includes(String(d.emote))&&Date.now()-rate.emote>500){p.emote=d.emote as Player['emote'];p.emoteAt=Date.now();rate.emote=Date.now();}
   if(type==='stand'||((type==='seat'||type==='bed')&&(p.seat||p.bed)))this.stand(p);
   else if(type==='seat'&&p.grounded){const s=floorSeats(p.floor).find(s=>s.id===d.id);if(s&&s.room===p.room&&Math.hypot(s.x-p.x,s.z-p.z)<2.2&&!Array.from(this.players.values()).some(q=>q.seat===s.id)){this.leaveGames(id);Object.assign(p,{seat:s.id,x:s.x,z:s.z,y:s.y,rotation:s.rotation,vy:0,grounded:true,moving:false,emote:''});}}
-  else if(type==='bed'&&p.grounded){const b=BEDS.find(b=>b.id===d.id);if(b&&b.room===p.room&&Math.hypot(b.exit.x-p.x,b.exit.z-p.z)<1.5&&!Array.from(this.players.values()).some(q=>q.bed===b.id)){this.leaveGames(id);Object.assign(p,{bed:b.id,x:b.x,z:b.z,y:b.y,rotation:b.rotation,vy:0,grounded:true,moving:false,emote:''});}}
+  else if(type==='bed'&&p.grounded){const b=floorBeds(p.floor).find(b=>b.id===d.id);if(b&&b.room===p.room&&Math.hypot(b.exit.x-p.x,b.exit.z-p.z)<1.5&&!Array.from(this.players.values()).some(q=>q.bed===b.id)){this.leaveGames(id);Object.assign(p,{bed:b.id,x:b.x,z:b.z,y:b.y,rotation:b.rotation,vy:0,grounded:true,moving:false,emote:''});}}
   if(type==='meeting'&&p.floor==='3'&&!p.inElevator){const room=String(d.room||p.room),lock=this.locks[room];if(lock){const admin=mayManageFloor(p,p.floor);if(!lock.host&&p.room===room)lock.host=id;if(admin||lock.host===id)lock.locked=d.locked===true;}}
   if(type.startsWith('game:')){
    const a=ACTIVITIES.find(a=>a.id===d.activity);if(!a||!this.near(p,a)||!p.grounded||p.bed)return null;
@@ -83,7 +84,7 @@ export class OfficeEngine {
     }
    }
   }
-  if(type==='chat'){const text=typeof d.text==='string'?d.text.trim().slice(0,500):'';if(!text||Date.now()-rate.chat<800)return null;rate.chat=Date.now();return {floor:p.floor,cabin:p.inElevator,id:crypto.randomUUID(),author:p.name,text,room:p.room,scope:d.scope==='room'?'room':'office',at:Date.now()};}
+  if(type==='chat'){const zone=chatZone(p).id,text=cleanChat(d.text);if(d.zone!==zone||!text||Date.now()-rate.chat<800)return null;rate.chat=Date.now();return {zone,floor:p.floor,cabin:p.inElevator,id:crypto.randomUUID(),author:p.name,text,room:p.room,scope:d.scope==='room'?'room':'office',at:Date.now()};}
   return null;
  }
  private sportsAction(p:Player,a:Activity,type:string,d:Record<string,unknown>){const pool=a.kind==='pool',g=pool?this.games.pool:this.games.bowling;
