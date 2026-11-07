@@ -2,7 +2,7 @@
 
 A standalone, low-poly virtual team office. A high-rise floor with 46 department workstations, a 50-seat tiered auditorium, an 8-seat meeting room, 20 usable beds, an outdoor veranda, a furnished canteen, customizable faceted human characters, and playable darts, chess, Connect Four, eight-ball billiards, and ten-pin bowling.
 
-**Current delivery:** [Ooooffice](https://delacruzmike.github.io/ooooffice/) is hosted on GitHub Pages. Version 0.3 adds mouse free-look, three camera views, sprinting, a centered Q emote wheel, expanded wardrobe, usable privacy doors, and authoritative pool/bowling physics. Supabase and the free Render server are provisioned; Google is enabled and service credentials are configured in the providers' dashboards. The release has 47 automated behavior/security/physics tests. Real-account, real-device, and voice pilot acceptance must be verified separately from simulated traffic. See the verification section below for the recorded capacity result.
+**Current delivery:** [Ooooffice](https://delacruzmike.github.io/ooooffice/) is hosted on GitHub Pages. Version 0.3 adds mouse free-look, three camera views, sprinting, a centered Q emote wheel, expanded wardrobe, usable privacy doors, and authoritative pool/bowling physics. Supabase and the free Render server are provisioned; Google is enabled and service credentials are configured in the providers' dashboards. The release has 47 automated behavior/security/physics tests. Google sign-in and approved team entry are working, and the owner confirmed a two-account voice smoke check. Wider real-device and voice acceptance remain separate from simulated traffic. See the verification section below for the recorded capacity result.
 
 ## Try the local preview
 
@@ -119,7 +119,9 @@ Before opening a wider pilot, also complete:
 - A restart with active voice participants; confirm all clients disconnect voice when their office connection is lost.
 - Review free-tier usage and projected cost from the real pilot before considering paid hosting.
 
-Capacity run status: the first continuous run was interrupted by host idle sleep after about 31 minutes and is inconclusive. The final one-hour local run is in progress under a temporary keep-awake guard; the final report is written to the ignored `loadtest-report.json`. This does not test hosted voice or replace a real-device pilot.
+Capacity result (2026-11-07): the final continuous **60-minute, 50-client local soak passed**, with 1,800,593 snapshots, 2,382 pool shots, 305 bowling rolls, and 292 door request/admission cycles. No unplanned client disconnections or server exits occurred; all clients converged on players, doors, locks, and game state after settling. Unauthorized reservations, extra-office creation, and a 51st connection were rejected. The first attempt was interrupted by host idle sleep and was inconclusive; the successful final run used a temporary keep-awake guard. The ignored `loadtest-report.json` records the result. This local run disables external services and does not certify hosted voice or actual mobile performance.
+
+Live smoke check: the owner confirmed successful Google entry for two approved accounts and working same-room voice with isolation between enclosed rooms. A 5–10-person group session, the broader voice failure cases listed above, a soak on the hosted infrastructure, and FPS checks on named pilot phones remain pending.
 
 ## Security boundaries and operational limits
 
