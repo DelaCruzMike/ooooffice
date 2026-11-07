@@ -2,7 +2,7 @@
 
 A standalone, low-poly virtual team office. A high-rise floor with 46 department workstations, a 50-seat tiered auditorium, an 8-seat meeting room, 20 usable beds, an outdoor veranda, a furnished canteen, customizable faceted human characters, and playable darts, chess, Connect Four, eight-ball billiards, and ten-pin bowling.
 
-**Current delivery:** [Ooooffice](https://delacruzmike.github.io/ooooffice/) is hosted on GitHub Pages. Version 0.3 adds mouse free-look, three camera views, sprinting, a centered Q emote wheel, expanded wardrobe, usable privacy doors, and authoritative pool/bowling physics. Supabase and the free Render server are provisioned; Google is enabled and service credentials are configured in the providers' dashboards. The release has 44 automated behavior/security/physics tests. Real-account, real-device, and voice pilot acceptance must be verified separately from simulated traffic. See the verification section below for the recorded capacity result.
+**Current delivery:** [Ooooffice](https://delacruzmike.github.io/ooooffice/) is hosted on GitHub Pages. Version 0.3 adds mouse free-look, three camera views, sprinting, a centered Q emote wheel, expanded wardrobe, usable privacy doors, and authoritative pool/bowling physics. Supabase and the free Render server are provisioned; Google is enabled and service credentials are configured in the providers' dashboards. The release has 45 automated behavior/security/physics tests. Real-account, real-device, and voice pilot acceptance must be verified separately from simulated traffic. See the verification section below for the recorded capacity result.
 
 ## Try the local preview
 
@@ -90,7 +90,7 @@ Eight-ball has a dedicated 3D view, angle/power aiming, called ball/pocket, soli
 
 Bowling supports solo practice or one to four live players over ten frames, with starting position, aim, power, and hook controls. Rapier simulates ball/pin collisions and gutters; standing pins persist for the second roll. Scoring includes strikes, spares, tenth-frame bonuses and ties. Leaving skips that bowler; an empty session resets. Spectators can open the game panels nearby. Neither game stores rankings or awards.
 
-Preview and server use the same Rapier physics/rules at fixed 60 Hz, loaded on demand and run only during shots. Online clients submit bounded shot inputs; the server computes all collisions and results and broadcasts snapshots. Games, doors, and room requests are temporary. Server test fixtures are registered only under the existing three-part localhost load-test guard.
+Preview and server use the same Rapier physics/rules at fixed 60 Hz, loaded on demand and run only during shots. Online clients submit bounded shot inputs; the server computes all collisions and results and broadcasts snapshots. Games, doors, and room requests are temporary. Generic Colyseus creation/joinOrCreate routes are blocked; admission authenticates before reserving a seat. Server test fixtures are registered only under the existing three-part localhost load-test guard.
 
 Connect listening or enable the microphone explicitly. Shared areas use distance-based volume; enclosed rooms use separate server-assigned LiveKit rooms. Settings includes desktop push-to-talk; connect listening first, then hold V to speak; Space is reserved for jumping. Deafen silences incoming audio. Individual volume controls are in People. Disconnect voice separately to stop using its connection. Force mute disconnects the target voice session; only that person can enable their microphone again.
 
@@ -102,7 +102,7 @@ Revocation removes office membership and current access. Removing a participant 
 npm test
 npm run build
 # Default: full 60-minute, 50-client soak against an isolated local server.
-npm run loadtest
+caffeinate -i npm run loadtest # macOS; prevents idle sleep only during this command
 # Shorter development check:
 LOAD_TEST_SECONDS=180 npm run loadtest
 ```
@@ -119,7 +119,7 @@ Before opening a wider pilot, also complete:
 - A restart with active voice participants; confirm all clients disconnect voice when their office connection is lost.
 - Review free-tier usage and projected cost from the real pilot before considering paid hosting.
 
-Capacity run status: the one-hour local simulation is in progress during this implementation; the final report is written to the ignored `loadtest-report.json`. This does not test hosted voice or replace a real-device pilot.
+Capacity run status: the first continuous run was interrupted by host idle sleep after about 31 minutes and is inconclusive. The final one-hour local run is in progress under a temporary keep-awake guard; the final report is written to the ignored `loadtest-report.json`. This does not test hosted voice or replace a real-device pilot.
 
 ## Security boundaries and operational limits
 

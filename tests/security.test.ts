@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OfficeRoom } from '../server/OfficeRoom.js';
-import { DEFAULT_AVATAR, makePlayer, emptySnapshot, type Snapshot } from '../shared/world.js';
+import { DEFAULT_AVATAR, PROTOCOL_VERSION, makePlayer, emptySnapshot, type Snapshot } from '../shared/world.js';
 import { SnapshotDiffer, applyPatch } from '../shared/sync.js';
 import type { Client } from '@colyseus/core';
 
@@ -37,3 +37,5 @@ test('delta synchronization carries metadata changes, compact motion, removals, 
   a.status='busy';base.locks.meeting.locked=true;base.players=[a];client=applyPatch(client,differ.diff(base)!);assert.equal(client.players.length,1);assert.equal(client.players[0].status,'busy');assert.equal(client.locks.meeting.locked,true);
 });
 test('outdated browser protocol is rejected before authentication',async()=>{const room=new OfficeRoom();let called=false;room.identityResolver=async()=>{called=true;throw new Error('should not authenticate');};await assert.rejects(room.onAuth({} as Client,{token:'anything',protocol:1},{headers:{}}),/version changed/);assert.equal(called,false);});
+
+test('HTTP matchmaking authenticates before seat reservation and rejects mismatched protocol/origin',async()=>{await assert.rejects(OfficeRoom.onAuth('',{protocol:PROTOCOL_VERSION},{headers:{}}),/sign|auth|token/i);await assert.rejects(OfficeRoom.onAuth('',{protocol:PROTOCOL_VERSION-1},{headers:{}}),/version/);await assert.rejects(OfficeRoom.onAuth('',{protocol:PROTOCOL_VERSION},{headers:{origin:'https://evil.invalid'}}),/allowed/);});

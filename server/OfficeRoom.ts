@@ -5,6 +5,14 @@ import { authenticate, loadTesting, evictVoice, loadLinks, saveProfile, type Ide
 import { roomAt, voiceZone, cleanAvatar, PROTOCOL_VERSION, type Vec, type Player } from '../shared/world.js';
 export let office: OfficeRoom;
 export class OfficeRoom extends Room {
+  // Authenticate at HTTP matchmaking, before reserving any of the 50 seats.
+  static async onAuth(token:string,options:{token?:string;protocol?:number},context:{headers?:{origin?:string}}){
+    if(options.protocol!==PROTOCOL_VERSION)throw new Error('Your office version changed. Reload this page to reconnect.');
+    const origin=context.headers?.origin,allowed=(process.env.FRONTEND_ORIGINS||'http://127.0.0.1:5173,http://localhost:5173').split(',').map(s=>s.trim());
+    if(origin&&!allowed.includes(origin))throw new Error('This website is not an allowed office client.');
+    const value=options.token||token||'';return {identity:await authenticate(value),token:value};
+  }
+
   engine = new OfficeEngine();
   identities = new Map<string, Identity>();
   tokens = new Map<string, string>();
