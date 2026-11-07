@@ -65,7 +65,7 @@ export class OfficeVoice {
       await this.closeRoom();
       const result = await api('/voice', { sessionId: id, microphone });
       const { Room: VoiceRoom, RoomEvent, Track } = await import('livekit-client');
-      const room = new VoiceRoom({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: {deviceId:this.audio.input,processor:new MicrophoneProcessor(()=>this.audio), echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); this.room = room; this.zone = result.zone;
+      const room = new VoiceRoom({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: {deviceId:this.audio.input,echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); this.room = room; this.zone = result.zone;
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
         if (track.kind === Track.Kind.Audio) { const element = track.attach(); element.dataset.participant = participant.identity; this.elements.add(element); document.body.appendChild(element); this.updateVolumes(); }
       });
@@ -75,8 +75,8 @@ export class OfficeVoice {
       room.on(RoomEvent.Disconnected, () => { if (this.room === room) this.update({ connected: false, microphone: false, speaking: [] }); });
       await room.connect(result.url, result.token); await room.startAudio();if(this.audio.output!=='default'&&'setSinkId' in HTMLMediaElement.prototype)await room.switchActiveDevice('audiooutput',this.audio.output);
       if (!this.state.wanted) throw new Error('Voice connection cancelled.');
-      if (this.desiredMicrophone) await room.localParticipant.setMicrophoneEnabled(true);
-      if (!this.desiredMicrophone || !this.state.wanted) await room.localParticipant.setMicrophoneEnabled(false);
+      if (this.desiredMicrophone) await this.setMicrophoneEnabled(room, true);
+      if (!this.desiredMicrophone || !this.state.wanted) await this.setMicrophoneEnabled(room, false);
       const enabled = this.desiredMicrophone && this.state.wanted;
       this.update({ connected: true, microphone: enabled, error: '' }); this.send('voice:state', { microphone: enabled }); this.updateVolumes();
     } catch (e) {
@@ -86,11 +86,37 @@ export class OfficeVoice {
       void api('/voice', { sessionId: id, disconnect: true }).catch(() => {});
     } finally { this.update({ busy: false }); }
   }
+  private async setMicrophoneEnabled(room: VoiceRoom, enabled: boolean) {
+    const { Track } = await import('livekit-client');
+    const participant = room.localParticipant;
+    if (!enabled || participant.getTrackPublication(Track.Source.Microphone)) {
+      await participant.setMicrophoneEnabled(enabled);
+      return;
+    }
+    // createTracks assigns the room's AudioContext before processors are attached.
+    // Process before publication so the voice gate applies to the first transmitted sample.
+    const tracks = await participant.createTracks({ audio: true, video: false });
+    try {
+      for (const track of tracks) {
+        if (track.kind === Track.Kind.Audio) {
+          await (track as import('livekit-client').LocalAudioTrack).setProcessor(new MicrophoneProcessor(() => this.audio));
+        }
+        if (!this.desiredMicrophone || !this.state.wanted || this.room !== room) {
+          tracks.forEach(t => t.stop());
+          return;
+        }
+        await participant.publishTrack(track);
+      }
+    } catch (error) {
+      tracks.forEach(track => track.stop());
+      throw error;
+    }
+  }
   async microphone(enabled: boolean) {
     this.desiredMicrophone = enabled;
     if (this.state.busy) return;
     if (!this.state.connected) { if (enabled) return this.connect(this.identity, true); return; }
-    try { await this.room?.localParticipant.setMicrophoneEnabled(enabled); this.desiredMicrophone = enabled; this.update({ microphone: enabled, error: '' }); this.send('voice:state', { microphone: enabled }); }
+    try { if(this.room) await this.setMicrophoneEnabled(this.room, enabled); this.desiredMicrophone = enabled; this.update({ microphone: enabled, error: '' }); this.send('voice:state', { microphone: enabled }); }
     catch { this.update({ error: 'Microphone access was denied or no microphone is available. Listening and text chat still work.' }); }
   }
   async zoneChanged() { await this.closeRoom(); this.update({ connected: false, microphone: false }); }
