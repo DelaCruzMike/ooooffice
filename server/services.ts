@@ -37,6 +37,7 @@ export async function authenticate(token: string): Promise<Identity> {
     if (error) throw new Error('Office membership setup is incomplete.');
   }
   const membership = await supabase.from('memberships').select('role,approved,department').eq('email', email).maybeSingle();
+  if(!membership.error&&!membership.data){await supabase.from('memberships').upsert({email,role:'member',approved:false},{onConflict:'email',ignoreDuplicates:true});}
   if (membership.error || !membership.data?.approved) throw new Error('Your email is not on the approved team list yet. Ask the office owner to invite you.');
   const profile = await supabase.from('profiles').select('name,avatar').eq('id', user.id).maybeSingle();
   if (profile.error) throw new Error('Your profile could not be loaded. Please try again.');

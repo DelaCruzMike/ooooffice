@@ -1,3 +1,4 @@
+import {cleanRoomSettings,mayManage} from '../shared/room-settings.js';
 import 'dotenv/config';
 import http from 'node:http';
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -36,6 +37,7 @@ app.post('/api/voice', wrap(async (req, res) => {
     await office.stopVoice(id);
     if (!office.engine.players.has(id)) throw new Error('Your office session ended.');
     if (req.body.disconnect) { p.voice = false; p.mic = false; res.json({ ok: true }); return; }
+    if(office.engine.roomSettings[p.room]?.voice==='muted')throw new Error('Voice is disabled in this room.');
     const zone = voiceZone(p);
     const result = await voiceToken(p, zone);
     if (!office.engine.players.has(id)) throw new Error('Your office session ended.');
@@ -59,7 +61,7 @@ app.post('/api/admin/members', wrap(async (req, res) => {
   const { data: existing, error: readError } = await supabase.from('memberships').select('role').eq('email', email).maybeSingle();
   if (readError) throw new Error('Membership could not be checked.');
   const role = req.body.role === 'administrator' ? 'administrator' : 'member';
-  if (existing?.role === 'owner' || email === req.identity!.email || (req.identity!.role !== 'owner' && (existing?.role === 'administrator' || role === 'administrator'))) { res.status(403).json({ error: 'Only the owner can manage administrators. Owner and self-access cannot be changed here.' }); return; }
+  if (email === req.identity!.email || !mayManage(req.identity!.role,existing?.role||'member',role)) { res.status(403).json({ error: 'Only the owner can manage administrators. Owner and self-access cannot be changed here.' }); return; }
   const approved = req.body.approved === true;
   const { error } = await supabase.from('memberships').upsert({ email, role, approved, department: String(req.body.department || 'Team').slice(0, 48) });
   if (error) throw new Error('Membership could not be updated.');
@@ -81,6 +83,16 @@ app.post('/api/admin/participant', wrap(async (req, res) => {
     office.clients.find(c => c.sessionId === id)?.send('voice:muted', 'An administrator muted your microphone. You can enable it again yourself.');
   } else throw new Error('Choose remove or mute.');
   res.json({ ok: true });
+}));
+app.post('/api/admin/rooms', wrap(async (req,res)=>{
+  if(!supabase)throw new Error('Office storage is unavailable.');
+  const id=String(req.body.room),settings=cleanRoomSettings(id,req.body.settings);
+  // Store each room separately to avoid lost updates between concurrent administrators.
+  const {error}=await supabase.from('office_config').upsert({key:'room:'+id,value:settings});
+  if(error)throw new Error('Room settings could not be saved.');
+  office.engine.roomSettings[id]=settings;
+  if(settings.voice==='muted')for(const p of office.engine.players.values())if(p.room===id)await office.stopVoice(p.id);
+  res.json({ok:true});
 }));
 app.post('/api/admin/links', wrap(async (req, res) => {
   if (!supabase) throw new Error('Office storage is not configured.');

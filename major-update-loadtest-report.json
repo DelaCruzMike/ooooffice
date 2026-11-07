@@ -1,0 +1,23 @@
+{
+  "kind": "local-multiplayer-soak",
+  "connections": 50,
+  "durationSeconds": 60,
+  "passed": true,
+  "snapshots": 32443,
+  "checks": [
+    "Unauthenticated matchmaking rejected.",
+    "Anonymous direct seat reservations rejected before consuming capacity.",
+    "Direct creation/joinOrCreate routes rejected without replacing the single office.",
+    "50 admitted; the 51st connection rejected.",
+    "All clients converged on players, doors, locks, and game state after movement and physics settled.",
+    "All clients received current snapshots containing the same 50 identities.",
+    "All authoritative positions stayed finite, in bounds, and outside walls/furniture within 1.5cm network quantization tolerance.",
+    "Jump height and grounded state stayed valid and converged after landing.",
+    "No unplanned client disconnections or server exits.",
+    "Physics shots submitted: pool 8, bowling 5; door request/admission cycles: 5."
+  ],
+  "completedAt": "2026-11-07T02:47:40.854Z",
+  "totalRunSeconds": 82,
+  "voiceTested": false,
+  "realMobileHardwareTested": false
+}

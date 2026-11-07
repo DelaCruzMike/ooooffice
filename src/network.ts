@@ -1,3 +1,4 @@
+import {loadAudio,MicrophoneProcessor,type AudioSettings} from './audio-settings';
 import {publicServices} from './service-config';
 import { applyPatch, type Patch } from '../shared/sync';
 import { emptySnapshot, PROTOCOL_VERSION } from '../shared/world';
@@ -45,6 +46,8 @@ export class OfficeConnection {
 }
 export type VoiceState = { connected: boolean; microphone: boolean; deafened: boolean; busy: boolean; speaking: string[]; error: string; wanted: boolean };
 export class OfficeVoice {
+  audio=loadAudio();
+  async configureAudio(settings:AudioSettings){const previous=this.audio;this.audio=settings;localStorage.setItem('ooooffice.audio',JSON.stringify(settings));if(this.room){if(previous.input!==settings.input)await this.room.switchActiveDevice('audioinput',settings.input);if(previous.output!==settings.output&&'setSinkId' in HTMLMediaElement.prototype)await this.room.switchActiveDevice('audiooutput',settings.output);}this.updateVolumes();}
   room?: VoiceRoom;
   state: VoiceState = { connected: false, microphone: false, deafened: false, busy: false, speaking: [], error: '', wanted: false };
   zone = '';
@@ -62,7 +65,7 @@ export class OfficeVoice {
       await this.closeRoom();
       const result = await api('/voice', { sessionId: id, microphone });
       const { Room: VoiceRoom, RoomEvent, Track } = await import('livekit-client');
-      const room = new VoiceRoom({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); this.room = room; this.zone = result.zone;
+      const room = new VoiceRoom({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: {deviceId:this.audio.input,processor:new MicrophoneProcessor(()=>this.audio), echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); this.room = room; this.zone = result.zone;
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
         if (track.kind === Track.Kind.Audio) { const element = track.attach(); element.dataset.participant = participant.identity; this.elements.add(element); document.body.appendChild(element); this.updateVolumes(); }
       });
@@ -70,7 +73,7 @@ export class OfficeVoice {
       room.on(RoomEvent.ActiveSpeakersChanged, speakers => this.update({ speaking: speakers.map(p => p.identity) }));
       room.on(RoomEvent.LocalTrackUnpublished, () => this.update({ microphone: false }));
       room.on(RoomEvent.Disconnected, () => { if (this.room === room) this.update({ connected: false, microphone: false, speaking: [] }); });
-      await room.connect(result.url, result.token); await room.startAudio();
+      await room.connect(result.url, result.token); await room.startAudio();if(this.audio.output!=='default'&&'setSinkId' in HTMLMediaElement.prototype)await room.switchActiveDevice('audiooutput',this.audio.output);
       if (!this.state.wanted) throw new Error('Voice connection cancelled.');
       if (this.desiredMicrophone) await room.localParticipant.setMicrophoneEnabled(true);
       if (!this.desiredMicrophone || !this.state.wanted) await room.localParticipant.setMicrophoneEnabled(false);
@@ -103,7 +106,7 @@ export class OfficeVoice {
       const p = this.players.find(p => p.id === participant.identity);
       const distance = p ? Math.hypot(p.x - me.x, p.z - me.z) : Infinity;
       const nearby = this.zone === 'commons' ? Math.max(0, Math.min(1, (14 - distance) / 10)) : 1;
-      const volume = this.state.deafened ? 0 : nearby * (this.volumes.get(participant.identity) ?? 1);
+      const volume = this.state.deafened ? 0 : nearby * this.audio.master * this.audio.voice * (this.volumes.get(participant.identity) ?? 1);
       (participant as RemoteParticipant).setVolume(volume);
     }
   }

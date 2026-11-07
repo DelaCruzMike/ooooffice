@@ -1,9 +1,12 @@
+import {dartLanding} from './aim.js';
+import {cleanRoomSettings,type RoomSettingsMap} from './room-settings.js';
 import {newPool,newBowling,rackPins,groupOf,bowlingProgress,type PoolGame,type BowlingGame} from './sports.js';
 import type {SportsPhysics} from './sports-physics.js';
 import { Chess } from 'chess.js';
 import { ACTIVITIES,BEDS,SEATS,EMOTES,PROTOCOL_VERSION,makePlayer,stepPlayer,jumpPlayer,groundHeight,canStand,roomAt,newLocks,newGames,newDarts,newChess,newGame,dropDisc,cleanAvatar,type Avatar,type Player,type Vec,type ChatMessage,type WorkLink,type Snapshot,type Role,type MoveInput,type Activity,newDoors,doorRect,inside,ROOMS,type EntryRequest } from './world.js';
 export function dartScore(x:number,y:number){const radius=Math.hypot(x,y);if(radius>1)return 0;if(radius<.037)return 50;if(radius<.094)return 25;const sectors=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];const angle=(Math.atan2(x,-y)+Math.PI*2+Math.PI/20)%(Math.PI*2);const base=sectors[Math.floor(angle/(Math.PI/10))];return base*(radius>.94?2:radius>.57&&radius<.63?3:1);}
 export class OfficeEngine {
+ roomSettings:RoomSettingsMap={};
  players=new Map<string,Player>();inputs=new Map<string,MoveInput & {at:number}>();locks=newLocks();doors=newDoors();requests=new Map<string,EntryRequest>();private requestAt=new Map<string,number>();private physics?:SportsPhysics;private physicsLoading?:Promise<SportsPhysics>;games=newGames();links:WorkLink[]=[];
  private sports(){return this.physicsLoading??=import('./sports-physics.js').then(async m=>{await m.initSports();return this.physics=new m.SportsPhysics();});}
  private rate=new Map<string,{chat:number;emote:number;dart:number}>();
@@ -24,7 +27,8 @@ export class OfficeEngine {
  }
  tick(dt:number,approveTransition:(p:Player,next:Vec)=>boolean=()=>true){this.physics?.tick(dt);this.updateDoors();for(const p of this.players.values()){
   const input=this.inputs.get(p.id),i=input&&Date.now()-input.at<300?input:{x:0,z:0};const next={...p};stepPlayer(next,i,dt,this.locks,this.doors);
-  if(approveTransition(p,next)){if(p.room!==next.room&&this.doors[p.room]?.closed){this.doors[p.room].closed=false;this.doors[p.room].until=Date.now()+5000;}Object.assign(p,next);}else{stepPlayer(p,{x:0,z:0},dt,this.locks,this.doors);p.moving=false;}
+  const settings=this.roomSettings[next.room];const access=next.room===p.room||p.role!=='member'||!settings||settings.access==='team'||settings.department===p.department;
+  if(access&&approveTransition(p,next)){if(p.room!==next.room&&this.doors[p.room]?.closed){this.doors[p.room].closed=false;this.doors[p.room].until=Date.now()+5000;}Object.assign(p,next);}else{stepPlayer(p,{x:0,z:0},dt,this.locks,this.doors);p.moving=false;}
   if(p.emote&&Date.now()-p.emoteAt>(['groove','shuffle','disco'].includes(p.emote)?6500:p.emote==='kiss'?2400:3200))p.emote='';
   for(const[room,lock]of Object.entries(this.locks))if(lock.host===p.id&&p.room!==room){lock.host=null;lock.locked=false;}
   for(const a of ACTIVITIES)if(this.isPlaying(p.id,a)&&!this.near(p,a,4.2))this.leaveGame(p.id,a);
@@ -41,6 +45,7 @@ export class OfficeEngine {
  action(id:string,type:string,data:unknown):ChatMessage|null{
   const p=this.players.get(id);if(!p)return null;const d=data&&typeof data==='object'?data as Record<string,unknown>:{};
   const rate=this.rate.get(id)||{chat:0,emote:0,dart:0};this.rate.set(id,rate);
+  if(type==='room:settings'&&this.practice&&p.role!=='member'&&ROOMS.some(r=>r.id===d.room))this.roomSettings[String(d.room)]=cleanRoomSettings(String(d.room),d.settings);
   if(type.startsWith('door:'))this.doorAction(p,type,d);
   if(type==='status'&&['available','busy','away'].includes(String(d.status)))p.status=d.status as Player['status'];
   if(type==='avatar')p.avatar=cleanAvatar(d.avatar);
@@ -65,7 +70,7 @@ export class OfficeEngine {
     if(!g.result&&allowed&&typeof d.from==='string'&&typeof d.to==='string')try{const chess=new Chess();for(const san of g.history)chess.move(san);const m=chess.move({from:d.from,to:d.to,promotion:['q','r','b','n'].includes(String(d.promotion))?String(d.promotion):'q'});if(m){g.fen=chess.fen();g.turn=chess.turn();g.lastMove=m.san;g.history.push(m.san);if(chess.isCheckmate()){g.result='Checkmate';g.winner=id;}else if(chess.isDraw()){g.result='Draw';g.winner=null;}else if(chess.isCheck())g.lastMove+=' · check';}}catch{ /* Illegal moves leave the board unchanged. */ }
    }
    if(type==='game:dart'&&a.kind==='darts'){
-    const g=this.games.darts[a.id],x=Number(d.x),y=Number(d.y),allowed=this.practice&&g.players[0]===id||g.players.length===2&&g.players[g.turn]===id;
+    const power=d.power===undefined?.72:Number(d.power),timing=d.timing===undefined?0:Number(d.timing);if(!Number.isFinite(power)||power<.05||power>1||!Number.isFinite(timing)||Math.abs(timing)>1)return null;const landing=dartLanding(Number(d.x),Number(d.y),power,timing);const g=this.games.darts[a.id],x=landing.x,y=landing.y,allowed=this.practice&&g.players[0]===id||g.players.length===2&&g.players[g.turn]===id;
     if(allowed&&!g.winner&&Number.isFinite(x)&&Number.isFinite(y)&&Math.abs(x)<=1.2&&Math.abs(y)<=1.2&&Date.now()-rate.dart>=350){rate.dart=Date.now();const score=dartScore(x,y);g.throws.push({x,y,score});g.throws=g.throws.slice(-3);const left=g.scores[g.turn]-score;g.darts++;
      if(left===0){g.scores[g.turn]=0;g.winner=id;}else if(left<0){g.scores[g.turn]=g.start;g.darts=3;}else g.scores[g.turn]=left;
      if(g.darts===3&&!g.winner){g.turn=g.players.length===1?0:1-g.turn;g.darts=0;g.start=g.scores[g.turn];}
@@ -87,11 +92,11 @@ export class OfficeEngine {
  if(!allowed||g.phase!=='aim'||(!this.practice&&pool&&g.players.length!==2))return;
  if(type==='game:place'&&pool){const game=g as PoolGame,x=Number(d.x),z=Number(d.z);if(!game.inHand||!Number.isFinite(x)||!Number.isFinite(z)||Math.abs(x)>1.69||Math.abs(z)>.74||game.inHand==='kitchen'&&x>-.9||game.balls.some(b=>b.id>0&&b.pocket===null&&Math.hypot(b.x-x,b.z-z)<.115))return;Object.assign(game.balls.find(b=>b.id===0)!,{x,z,pocket:null});return;}
  if(type!=='game:shot')return;const angle=Number(d.angle),power=Number(d.power);if(!Number.isFinite(angle)||!Number.isFinite(power)||power<.05||power>1||Math.abs(angle)>Math.PI)return;
- if(pool){const game=g as PoolGame,ball=Number(d.ball),pocket=Number(d.pocket),cue=game.balls.find(b=>b.id===0)!;if(game.inHand==='kitchen'&&cue.x>-.9||game.inHand&&game.balls.some(b=>b.id>0&&b.pocket===null&&Math.hypot(b.x-cue.x,b.z-cue.z)<.115))return;
+ if(pool){const spinX=Number(d.spinX||0),spinY=Number(d.spinY||0);if(!Number.isFinite(spinX)||!Number.isFinite(spinY)||Math.hypot(spinX,spinY)>1.001)return;const game=g as PoolGame,ball=Number(d.ball),pocket=Number(d.pocket),cue=game.balls.find(b=>b.id===0)!;if(game.inHand==='kitchen'&&cue.x>-.9||game.inHand&&game.balls.some(b=>b.id>0&&b.pocket===null&&Math.hypot(b.x-cue.x,b.z-cue.z)<.115))return;
  if(!game.break&&(!Number.isInteger(pocket)||pocket<0||pocket>5||!game.balls.some(b=>b.id===ball&&b.id>0&&b.pocket===null)||game.groups[game.turn]&&ball!==8&&groupOf(ball)!==game.groups[game.turn]))return;
- game.phase='rolling';game.message='Setting up the game…';void this.sports().then(physics=>{if(this.games.pool!==game||game.phase!=='rolling')return;physics.startPool(game,angle,power,ball,pocket);}).catch(()=>{game.phase='aim';game.message='Physics could not load. Retry or reload the page.';});
- }else{const game=g as BowlingGame,x=Number(d.x),hook=Number(d.hook);if(!Number.isFinite(x)||!Number.isFinite(hook)||Math.abs(x)>.8||Math.abs(hook)>1||Math.abs(angle)>.2||bowlingProgress(game.rolls[p.id]||[]).done)return;game.phase='rolling';game.message='Setting up the game…';void this.sports().then(physics=>{if(this.games.bowling!==game||game.phase!=='rolling')return;physics.startBowling(game,x,angle,power,hook);}).catch(()=>{game.phase='aim';game.message='Physics could not load. Retry or reload the page.';});}
+ game.phase='rolling';game.message='Setting up the game…';void this.sports().then(physics=>{if(this.games.pool!==game||game.phase!=='rolling')return;physics.startPool(game,angle,power,ball,pocket,spinX,spinY);}).catch(()=>{game.phase='aim';game.message='Physics could not load. Retry or reload the page.';});
+ }else{const timing=Number(d.timing||0);if(!Number.isFinite(timing)||Math.abs(timing)>1)return;const game=g as BowlingGame,x=Number(d.x),hook=Number(d.hook);if(!Number.isFinite(x)||!Number.isFinite(hook)||Math.abs(x)>.8||Math.abs(hook)>1||Math.abs(angle)>.2||bowlingProgress(game.rolls[p.id]||[]).done)return;game.phase='rolling';game.message='Setting up the game…';void this.sports().then(physics=>{if(this.games.bowling!==game||game.phase!=='rolling')return;physics.startBowling(game,x,Math.max(-.24,Math.min(.24,angle+timing*.04)),power,hook);}).catch(()=>{game.phase='aim';game.message='Physics could not load. Retry or reload the page.';});}
  }
  dispose(){this.physics?.dispose();}
- snapshot():Snapshot{return {protocol:PROTOCOL_VERSION,players:[...this.players.values()].map(p=>({...p,avatar:{...p.avatar}})),locks:structuredClone(this.locks),doors:structuredClone(this.doors),games:structuredClone(this.games),links:this.links.map(l=>({...l}))};}
+ snapshot():Snapshot{return {roomSettings:structuredClone(this.roomSettings),protocol:PROTOCOL_VERSION,players:[...this.players.values()].map(p=>({...p,avatar:structuredClone(p.avatar)})),locks:structuredClone(this.locks),doors:structuredClone(this.doors),games:structuredClone(this.games),links:this.links.map(l=>({...l}))};}
 }

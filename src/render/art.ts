@@ -8,6 +8,7 @@ import { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 import { TransformNode } from '@babylonjs/core/Meshes/transformNode';
 import { ROOMS,WALLS,FURNITURE,SEATS,BEDS,ACTIVITIES,FLOOR_AREAS,entrance,BOUNDS,type Furniture,type OfficeRoom,type Doors } from '../../shared/world';
 export class OfficeArt {
+ signs=new Map<string,{mesh:Mesh;name:string}>();
  mats=new Map<string,StandardMaterial>();private shadowMat?:StandardMaterial;doors=new Map<string,TransformNode>();fish:TransformNode[]=[];effects:Mesh[]=[];
  constructor(public scene:Scene){}
  mat(color:string,alpha=1,emissive=false){const key=`${color}-${alpha}-${emissive}`;if(!this.mats.has(key)){const m=new StandardMaterial(key,this.scene);m.diffuseColor=Color3.FromHexString(color);m.specularColor=new Color3(.07,.07,.07);m.alpha=alpha;if(alpha<1)m.backFaceCulling=false;if(emissive){m.emissiveColor=Color3.FromHexString(color);m.disableLighting=true;}this.mats.set(key,m);}return this.mats.get(key)!;}
@@ -82,7 +83,8 @@ export class OfficeArt {
  default:this.box(f.kind,f.x,(f.h||1)/2,f.z,f.w,f.h||1,f.d,'#9ba88e');}
  }
  placard(r:OfficeRoom){const e=entrance(r),south=r.side==='south',west=r.side==='west';let x=e.x+(south?-2:west?-.13:2),z=e.z+(south?.13:west?-2:-.13),rotation=south?Math.PI:west?Math.PI/2:0;if(r.id==='lounge'){x=-8.1;z=11.16;}
- this.box('placard mount',x,1.65,z,west?.09:1.85,.58,west?1.85:.09,'#475c53');this.text(`${r.name.toUpperCase()}`,x+(west?-.065:0),1.65,z+(south?.065:west?0:-.065),1.75,.48,'#eee9d7','',rotation);}
+ this.box('placard mount',x,1.65,z,west?.09:1.85,.58,west?1.85:.09,'#475c53');const mesh=this.text(`${r.name.toUpperCase()}`,x+(west?-.065:0),1.65,z+(south?.065:west?0:-.065),1.75,.48,'#eee9d7','',rotation);this.signs.set(r.id,{mesh,name:r.name});}
+ syncSigns(){for(const r of ROOMS){const s=this.signs.get(r.id);if(!s||s.name===r.name)continue;const mat=s.mesh.material as StandardMaterial,tex=mat.diffuseTexture as DynamicTexture,ctx=tex.getContext() as CanvasRenderingContext2D;ctx.clearRect(0,0,1024,256);ctx.fillStyle='#eee9d7';ctx.textAlign='center';ctx.font=`600 ${Math.min(64,Math.floor(950/(r.name.length*.62)))}px sans-serif`;ctx.fillText(r.name.toUpperCase(),512,128);tex.update();s.name=r.name;}}
  build(){
  for(const floor of FLOOR_AREAS){this.box('high rise slab',floor.x,-.24,floor.z,floor.w,.48,floor.d,'#6b797a');this.box('hall stone floor',floor.x,-.025,floor.z,floor.w,.08,floor.d,'#b9bcb2');}
  for(const r of ROOMS){const color=r.id==='operations'?'#7f6c52':r.id==='lounge'?'#aa9778':r.id==='smoking'?'#af9b75':r.id==='pantry'?'#c9c9b9':'#929c9b';this.box(`${r.name} floor`,r.x,.025,r.z,r.w-.15,.04,r.d-.15,color);if(r.id==='lounge')this.box('lounge rug',-16,.055,.7,9,.025,8,'#7d8f7b');if(r.id==='sleeping')this.box('quiet rug',r.x,.055,r.z,r.w-.6,.025,r.d-.6,'#9ca6a1');}
@@ -105,6 +107,6 @@ export class OfficeArt {
  city(){let seed=914;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};for(let i=0;i<85;i++){const angle=i*2.39996,distance=90+rand()*165,x=Math.cos(angle)*distance,z=Math.sin(angle)*distance,height=30+rand()*100,w=8+rand()*10,d=8+rand()*10;const color=['#82989d','#96a7a6','#a2afa9','#758c93'][i%4];this.box('city tower',x,-100+height/2,z,w,height,d,color);this.box('roof cap',x,-100+height+.2,z,w+.2,.4,d+.2,'#6f878d');for(let row=1;row<height/4;row++){for(const sign of[-1,1])this.box('city window band',x,-100+row*4,z+sign*(d/2+.02),w-.8,.9,.03,i%3?'#b7c9c8':'#c7c6aa');}}
  this.box('distant city ground',0,-100,0,700,.4,600,'#9caeaa');}
  batch(){const groups=new Map<StandardMaterial,Mesh[]>();for(const mesh of [...this.scene.meshes]){if(!(mesh instanceof Mesh)||mesh.billboardMode||!mesh.material||mesh.material.name.startsWith('label-')||this.fish.some(f=>mesh.isDescendantOf(f)))continue;const m=mesh.material as StandardMaterial;const list=groups.get(m)||[];list.push(mesh);groups.set(m,list);}for(const list of groups.values())if(list.length>1){const merged=Mesh.MergeMeshes(list,true,true);if(merged)merged.isPickable=false;}for(const mesh of this.scene.meshes)if(!mesh.billboardMode&&!this.fish.some(f=>mesh.isDescendantOf(f)))mesh.freezeWorldMatrix();}
- syncDoors(doors:Doors){for(const[id,node]of this.doors){const desired=doors[id]?.closed?0:-Math.PI/2;node.rotation.y+=(desired-node.rotation.y)*.25;}}
+ syncDoors(doors:Doors){for(const[id,node]of this.doors){node.setEnabled(Boolean(doors[id]?.closed));node.rotation.y=0;}}
  animate(t:number,low:boolean){if(low&&Math.floor(t*30)%3)return;for(const f of this.fish){f.position.x=f.metadata.x+Math.sin(t*.8+f.metadata.phase)*.22;f.position.z=f.metadata.z+Math.sin(t+f.metadata.phase)*.12;f.rotation.y=Math.cos(t*.8+f.metadata.phase)>0?0:Math.PI;}}
 }

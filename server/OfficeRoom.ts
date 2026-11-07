@@ -1,8 +1,9 @@
+import {cleanRoomSettings} from '../shared/room-settings.js';
 import { SnapshotDiffer } from '../shared/sync.js';
 import { Room, type Client } from '@colyseus/core';
 import { OfficeEngine } from './engine.js';
-import { authenticate, loadTesting, evictVoice, loadLinks, saveProfile, type Identity } from './services.js';
-import { roomAt, voiceZone, cleanAvatar, PROTOCOL_VERSION, type Vec, type Player } from '../shared/world.js';
+import { authenticate, supabase, loadTesting, evictVoice, loadLinks, saveProfile, type Identity } from './services.js';
+import { ROOMS, roomAt, voiceZone, cleanAvatar, PROTOCOL_VERSION, type Vec, type Player } from '../shared/world.js';
 export let office: OfficeRoom;
 export class OfficeRoom extends Room {
   // Authenticate at HTTP matchmaking, before reserving any of the 50 seats.
@@ -33,7 +34,8 @@ export class OfficeRoom extends Room {
     if (!rate || now - rate.at > 1000) { rate = { at: now, count: 0 }; this.counts.set(id, rate); }
     return ++rate.count <= 40;
   }
-  onCreate() {
+  async onCreate() {
+    if(supabase){const {data,error}=await supabase.from('office_config').select('key,value').like('key','room:%');if(error)throw new Error('Room access settings could not be loaded.');if(data)this.engine.roomSettings=Object.fromEntries(data.filter(row=>ROOMS.some(r=>r.id===row.key.slice(5))).map(row=>[row.key.slice(5),cleanRoomSettings(row.key.slice(5),row.value)]));}
     office = this; this.maxClients = 50; this.autoDispose = false;
     loadLinks().then(links => this.engine.links = links).catch(() => console.warn('Office links unavailable; admin can retry.'));
     this.setSimulationInterval(dt => this.engine.tick(dt / 1000, (p, next) => this.transition(p, next)), 50);

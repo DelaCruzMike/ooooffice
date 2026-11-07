@@ -4,15 +4,15 @@ import { POCKETS, resolvePool, finishBowlingRoll, type PoolGame, type BowlingGam
 let initialized:Promise<void>|undefined;
 export function initSports(){return initialized??=Promise.all([R2.init(),R3.init()]).then(()=>{});}
 export class SportsPhysics {
- private pool?:{world:R2.World;events:R2.EventQueue;bodies:Map<number,R2.RigidBody>;ids:Map<number,number>;outcome:PoolOutcome;t:number;quiet:number;game:PoolGame};
+ private pool?:{world:R2.World;events:R2.EventQueue;bodies:Map<number,R2.RigidBody>;ids:Map<number,number>;outcome:PoolOutcome;t:number;quiet:number;game:PoolGame;spinX:number;spinY:number;angle:number;spinApplied:boolean};
  private bowling?:{world:R3.World;ball:R3.RigidBody;pins:Map<number,R3.RigidBody>;game:BowlingGame;t:number;hook:number;quiet:number;gutter:boolean};
  private accumulator=0;
- startPool(g:PoolGame,angle:number,power:number,calledBall:number,calledPocket:number){
+ startPool(g:PoolGame,angle:number,power:number,calledBall:number,calledPocket:number,spinX=0,spinY=0){
  this.stopPool();const world=new R2.World({x:0,y:0}),events=new R2.EventQueue(true),bodies=new Map<number,R2.RigidBody>(),ids=new Map<number,number>();world.timestep=1/60;
  const rail=(x:number,z:number,w:number,d:number)=>{const c=world.createCollider(R2.ColliderDesc.cuboid(w/2,d/2).setTranslation(x,z).setRestitution(.82).setFriction(.05).setActiveEvents(R2.ActiveEvents.COLLISION_EVENTS));ids.set(c.handle,-1);};
  for(const z of[-.9,.9])for(const x of[-.9,.9])rail(x,z,1.54,.08);for(const x of[-1.85,1.85])rail(x,0,.08,1.4);
  for(const b of g.balls.filter(b=>b.pocket===null)){const body=world.createRigidBody(R2.RigidBodyDesc.dynamic().setTranslation(b.x,b.z).setLinearDamping(.5).setAngularDamping(1).setCcdEnabled(true));const c=world.createCollider(R2.ColliderDesc.ball(.055).setMass(1).setRestitution(.94).setFriction(.03).setActiveEvents(R2.ActiveEvents.COLLISION_EVENTS),body);bodies.set(b.id,body);ids.set(c.handle,b.id);}
- bodies.get(0)!.setLinvel({x:Math.cos(angle)*power*8,y:Math.sin(angle)*power*8},true);this.pool={world,events,bodies,ids,outcome:{first:null,rail:false,railBalls:[],pockets:[],calledBall,calledPocket,offTable:[],eightAllowed:!!g.groups[g.turn]&&!g.balls.some(b=>b.id>0&&b.id!==8&&b.pocket===null&&(b.id<8?'solids':'stripes')===g.groups[g.turn])},t:0,quiet:0,game:g};g.phase='rolling';g.message='Shot in motion.';g.shot++;
+ bodies.get(0)!.setLinvel({x:Math.cos(angle)*power*8,y:Math.sin(angle)*power*8},true);this.pool={world,events,bodies,ids,outcome:{first:null,rail:false,railBalls:[],pockets:[],calledBall,calledPocket,offTable:[],eightAllowed:!!g.groups[g.turn]&&!g.balls.some(b=>b.id>0&&b.id!==8&&b.pocket===null&&(b.id<8?'solids':'stripes')===g.groups[g.turn])},t:0,quiet:0,game:g,spinX,spinY,angle,spinApplied:false};bodies.get(0)!.setAngvel(spinX*power*35,true);g.phase='rolling';g.message='Shot in motion.';g.shot++;
  }
  startBowling(g:BowlingGame,x:number,angle:number,power:number,hook:number){
  this.stopBowling();const world=new R3.World({x:0,y:-9.81,z:0});world.timestep=1/60;
@@ -25,6 +25,13 @@ export class SportsPhysics {
  tick(dt:number){this.accumulator=Math.min(.25,this.accumulator+dt);while(this.accumulator>=1/60){this.accumulator-=1/60;this.stepPool();this.stepBowling();}}
  private stepPool(){const s=this.pool;if(!s)return;if(s.game.phase!=='rolling'){this.stopPool();return;}s.t+=1/60;s.world.step(s.events);
  s.events.drainCollisionEvents((a,b,started)=>{if(!started)return;const x=s.ids.get(a),y=s.ids.get(b);if(x===undefined||y===undefined)return;if(x===0&&y>0&&s.outcome.first===null)s.outcome.first=y;if(y===0&&x>0&&s.outcome.first===null)s.outcome.first=x;if(x===-1||y===-1){const id=x===-1?y:x;if(id>0)s.outcome.railBalls.push(id);if(s.outcome.first!==null)s.outcome.rail=true;}});
+ const cue=s.bodies.get(0);if(cue&&cue.isEnabled()){
+ // Cloth/English approximation: bounded side spin curves the cue, longitudinal spin
+ // transfers follow/draw momentum after first object-ball contact.
+ const v=cue.linvel(),decay=Math.exp(-s.t*2);
+ if(s.outcome.first!==null&&!s.spinApplied){cue.applyImpulse({x:Math.cos(s.angle)*s.spinY*.7,y:Math.sin(s.angle)*s.spinY*.7},true);s.spinApplied=true;}
+ cue.applyImpulse({x:-v.y*s.spinX*.002*decay,y:v.x*s.spinX*.002*decay},true);
+ }
  let moving=false;for(const b of s.game.balls){const body=s.bodies.get(b.id);if(!body||b.pocket!==null)continue;const v=body.translation();b.x=v.x;b.z=v.y;if(Math.abs(b.x)>1.98||Math.abs(b.z)>1.05){b.pocket=-1;s.outcome.offTable!.push(b.id);body.setEnabled(false);continue;}const pocket=POCKETS.findIndex(p=>Math.hypot(p.x-b.x,p.z-b.z)<.115);if(pocket>=0){b.pocket=pocket;s.outcome.pockets.push({id:b.id,pocket});body.setEnabled(false);continue;}const vel=body.linvel();if(Math.hypot(vel.x,vel.y)>.035)moving=true;}
  s.quiet=moving?0:s.quiet+1/60;if(s.t>18||s.t>.5&&s.quiet>.35){resolvePool(s.game,s.outcome);this.stopPool();}
  }

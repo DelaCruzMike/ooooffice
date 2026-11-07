@@ -1,7 +1,9 @@
+import {cleanCosmetics,type Cosmetics} from './cosmetics.js';
+import type {RoomSettingsMap} from './room-settings.js';
 import { newPool, newBowling, type PoolGame, type BowlingGame } from './sports.js';
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export type Vec = { x: number; z: number };
-export type Avatar = { skin: string; hair: string; style: 'crop' | 'bob' | 'bun' | 'quiff' | 'ponytail' | 'curls'; shirt: string; trousers: string; accessory: 'none' | 'glasses' | 'cap' | 'headset'; top?:'tshirt'|'polo'|'buttondown'|'hoodie'; bottom?:'trousers'|'jeans'|'shorts'; shoes?:'sneakers'|'office' };
+export type Avatar = { cosmetics?:Cosmetics; skin: string; hair: string; style: 'crop' | 'bob' | 'bun' | 'quiff' | 'ponytail' | 'curls'; shirt: string; trousers: string; accessory: 'none' | 'glasses' | 'cap' | 'headset'; top?:'tshirt'|'polo'|'buttondown'|'hoodie'; bottom?:'trousers'|'jeans'|'shorts'; shoes?:'sneakers'|'office' };
 export type Role = 'owner' | 'administrator' | 'member';
 export const EMOTES = ['wave','salute','clap','kiss','groove','shuffle','disco'] as const;
 export type Emote = '' | typeof EMOTES[number];
@@ -135,7 +137,7 @@ export function chaseCamera(p:Player){
  const desired=bed?{x:bed.x+(bed.x<30?3.5:-3.5),y:2.98,z:bed.z-.38}:{x:p.x-Math.sin(p.rotation)*3.5,y:Math.min(3.02,p.y+2.05),z:p.z-Math.cos(p.rotation)*3.5};let position=desired;
  for(let t=.08;t<=1;t+=.035){const q={x:target.x+(desired.x-target.x)*t,y:target.y+(desired.y-target.y)*t,z:target.z+(desired.z-target.z)*t};if(cameraBlocked(q)){const safe=Math.max(.07,t-.045);position={x:target.x+(desired.x-target.x)*safe,y:target.y+(desired.y-target.y)*safe,z:target.z+(desired.z-target.z)*safe};break;}}return {target,position};}
 
-export function cleanAvatar(value:unknown):Avatar{const a=value&&typeof value==='object'?value as Record<string,unknown>:{};const color=(key:'skin'|'hair'|'shirt'|'trousers')=>typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key] as string)?a[key] as string:DEFAULT_AVATAR[key];return {skin:color('skin'),hair:color('hair'),shirt:color('shirt'),trousers:color('trousers'),top:['tshirt','polo','buttondown','hoodie'].includes(String(a.top))?a.top as Avatar['top']:'tshirt',bottom:['trousers','jeans','shorts'].includes(String(a.bottom))?a.bottom as Avatar['bottom']:'trousers',shoes:a.shoes==='office'?'office':'sneakers',style:['crop','bob','bun','quiff','ponytail','curls'].includes(String(a.style))?a.style as Avatar['style']:'crop',accessory:['none','glasses','cap','headset'].includes(String(a.accessory))?a.accessory as Avatar['accessory']:'none'};}
+export function cleanAvatar(value:unknown):Avatar{const a=value&&typeof value==='object'?value as Record<string,unknown>:{};const color=(key:'skin'|'hair'|'shirt'|'trousers')=>typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key] as string)?a[key] as string:DEFAULT_AVATAR[key];return {cosmetics:cleanCosmetics(a.cosmetics),skin:color('skin'),hair:color('hair'),shirt:color('shirt'),trousers:color('trousers'),top:['tshirt','polo','buttondown','hoodie'].includes(String(a.top))?a.top as Avatar['top']:'tshirt',bottom:['trousers','jeans','shorts'].includes(String(a.bottom))?a.bottom as Avatar['bottom']:'trousers',shoes:a.shoes==='office'?'office':'sneakers',style:['crop','bob','bun','quiff','ponytail','curls'].includes(String(a.style))?a.style as Avatar['style']:'crop',accessory:['none','glasses','cap','headset'].includes(String(a.accessory))?a.accessory as Avatar['accessory']:'none'};}
 export function makePlayer(id:string,name:string,avatar=DEFAULT_AVATAR):Player{return {...SPAWN,id,userId:id,name:name.slice(0,32),department:'Team',role:'member',rotation:Math.PI,y:0,vy:0,grounded:true,moving:false,room:'lounge',status:'available',avatar:cleanAvatar(avatar),emote:'',emoteAt:0,seat:null,bed:null,voice:false,mic:false,forcedMute:false};}
 export type ChatMessage={id:string;author:string;text:string;scope:'office'|'room';room:string;at:number};
 export type WorkLink={label:string;url:string};
@@ -148,5 +150,5 @@ export type ActivityGames={connect4:Game;darts:Record<string,DartsGame>;chess:Ch
 export const newDarts=():DartsGame=>({players:[],scores:[301,301],turn:0,darts:0,start:301,winner:null,throws:[]});
 export const newChess=():ChessGame=>({players:[],fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',turn:'w',lastMove:'',history:[],result:'',winner:null});
 export const newGames=():ActivityGames=>({connect4:newGame(),darts:{'darts-commons':newDarts()},chess:newChess(),pool:newPool(),bowling:newBowling()});
-export type Snapshot={protocol:number;players:Player[];locks:Locks;doors:Doors;games:ActivityGames;links:WorkLink[]};
-export const emptySnapshot=():Snapshot=>({protocol:PROTOCOL_VERSION,players:[],locks:newLocks(),doors:newDoors(),games:newGames(),links:[]});
+export type Snapshot={roomSettings:RoomSettingsMap;protocol:number;players:Player[];locks:Locks;doors:Doors;games:ActivityGames;links:WorkLink[]};
+export const emptySnapshot=():Snapshot=>({roomSettings:{},protocol:PROTOCOL_VERSION,players:[],locks:newLocks(),doors:newDoors(),games:newGames(),links:[]});
