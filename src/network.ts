@@ -1,3 +1,4 @@
+import {resolveVoice} from '../shared/building';
 import {loadAudio,MicrophoneProcessor,type AudioSettings} from './audio-settings';
 import {publicServices} from './service-config';
 import { applyPatch, type Patch } from '../shared/sync';
@@ -16,7 +17,7 @@ export async function api(path: string, body?: unknown) {
   if (!session) throw new Error('Please sign in before entering the team office.');
   const response = await fetch(`${serverUrl}/api${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(35000) });
   const data = await response.json().catch(() => ({ error: 'The office is starting. Please try again shortly.' }));
-  if (!response.ok) throw new Error(data.error || 'The office could not complete that action.');
+  if (!response.ok) throw Object.assign(new Error(data.error || 'The office could not complete that action.'),{status:response.status});
   return data;
 }
 export class OfficeConnection {
@@ -50,12 +51,12 @@ export class OfficeVoice {
   async configureAudio(settings:AudioSettings){const previous=this.audio;this.audio=settings;localStorage.setItem('ooooffice.audio',JSON.stringify(settings));if(this.room){if(previous.input!==settings.input)await this.room.switchActiveDevice('audioinput',settings.input);if(previous.output!==settings.output&&'setSinkId' in HTMLMediaElement.prototype)await this.room.switchActiveDevice('audiooutput',settings.output);}this.updateVolumes();}
   room?: VoiceRoom;
   state: VoiceState = { connected: false, microphone: false, deafened: false, busy: false, speaking: [], error: '', wanted: false };
-  zone = '';
+  zone = '';doors:import('../shared/world').Doors={};roomSettings:import('../shared/room-settings').RoomSettingsMap={};
   identity = '';
   players: Player[] = [];
   volumes = new Map<string, number>();
   elements = new Set<HTMLMediaElement>();
-  desiredMicrophone = false;
+  desiredMicrophone = false;retryAfter=0;transitionVolume=1;
   constructor(public changed: (s: VoiceState) => void, public send: (type: string, data: unknown) => void) {}
   update(patch: Partial<VoiceState>) { Object.assign(this.state, patch); this.changed({ ...this.state }); }
   async connect(id: string, microphone = false) {
@@ -63,7 +64,7 @@ export class OfficeVoice {
     this.identity = id; this.desiredMicrophone = microphone; this.update({ busy: true, error: '', wanted: true });
     try {
       await this.closeRoom();
-      const result = await api('/voice', { sessionId: id, microphone });
+      const me=this.players.find(p=>p.id===id);const result = await api('/voice', { sessionId: id, microphone,zone:me?resolveVoice(me,this.doors,this.roomSettings):undefined });
       const { Room: VoiceRoom, RoomEvent, Track } = await import('livekit-client');
       const room = new VoiceRoom({ adaptiveStream: true, dynacast: true, audioCaptureDefaults: {deviceId:this.audio.input,echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); this.room = room; this.zone = result.zone;
       room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
@@ -78,9 +79,9 @@ export class OfficeVoice {
       if (this.desiredMicrophone) await this.setMicrophoneEnabled(room, true);
       if (!this.desiredMicrophone || !this.state.wanted) await this.setMicrophoneEnabled(room, false);
       const enabled = this.desiredMicrophone && this.state.wanted;
-      this.update({ connected: true, microphone: enabled, error: '' }); this.send('voice:state', { microphone: enabled }); this.updateVolumes();
+      this.transitionVolume=0;this.update({ connected: true, microphone: enabled, error: '' });for(let i=1;i<=4&&this.room===room;i++){this.transitionVolume=i/4;this.updateVolumes();await new Promise(r=>setTimeout(r,25));} this.send('voice:state', { microphone: enabled }); this.updateVolumes();
     } catch (e) {
-      await this.closeRoom(); this.desiredMicrophone = false;
+      await this.closeRoom();if((e as {status?:number}).status===409){this.retryAfter=Date.now()+1200;this.update({connected:false,microphone:false,error:'Updating conversation…'});return;}this.desiredMicrophone = false;
       this.update({ connected: false, microphone: false, wanted: false, error: (e as Error).message || 'Voice is unavailable. You can still use text chat.' });
       // Retire unused credentials if permission or transport setup failed.
       void api('/voice', { sessionId: id, disconnect: true }).catch(() => {});
@@ -123,7 +124,7 @@ export class OfficeVoice {
   sync(players: Player[], id: string) {
     this.players = players; this.identity = id; this.updateVolumes();
     const me = players.find(p => p.id === id);
-    if (me && this.state.wanted && !this.state.busy && this.zone && voiceZone(me) !== this.zone) void this.connect(id, this.desiredMicrophone);
+    if (me && this.state.wanted && !this.state.busy && Date.now()>=this.retryAfter && resolveVoice(me,this.doors,this.roomSettings)!=='muted' && (!this.state.connected || resolveVoice(me,this.doors,this.roomSettings) !== this.zone)) void this.connect(id, this.desiredMicrophone);
   }
   updateVolumes() {
     const me = this.players.find(p => p.id === this.identity);
@@ -131,14 +132,14 @@ export class OfficeVoice {
     for (const participant of this.room?.remoteParticipants.values() || []) {
       const p = this.players.find(p => p.id === participant.identity);
       const distance = p ? Math.hypot(p.x - me.x, p.z - me.z) : Infinity;
-      const nearby = this.zone === 'commons' ? Math.max(0, Math.min(1, (14 - distance) / 10)) : 1;
-      const volume = this.state.deafened ? 0 : nearby * this.audio.master * this.audio.voice * (this.volumes.get(participant.identity) ?? 1);
+      const nearby = this.zone.includes(':proximity:') ? Math.max(0, Math.min(1, (14 - distance) / 10)) : 1;
+      const volume = this.state.deafened ? 0 : this.transitionVolume * nearby * this.audio.master * this.audio.voice * (this.volumes.get(participant.identity) ?? 1);
       (participant as RemoteParticipant).setVolume(volume);
     }
   }
   setVolume(id: string, volume: number) { this.volumes.set(id, volume); this.updateVolumes(); }
   deafen() { this.update({ deafened: !this.state.deafened }); this.updateVolumes(); }
-  async closeRoom() { const room = this.room; this.room = undefined; await room?.disconnect(); this.elements.forEach(el => el.remove()); this.elements.clear(); }
+  async closeRoom() { const room = this.room; this.room = undefined;if(room){for(const participant of room.remoteParticipants.values())participant.setVolume(0);await room.localParticipant.setMicrophoneEnabled(false).catch(()=>{});} await room?.disconnect(); this.elements.forEach(el => el.remove()); this.elements.clear(); }
   async disconnect(notify = true) {
     this.desiredMicrophone = false; this.update({ wanted: false, connected: false, microphone: false, speaking: [] }); await this.closeRoom();
     this.send('voice:state', { microphone: false }); if (notify && this.identity) try { await api('/voice', { sessionId: this.identity, disconnect: true }); } catch (e) { this.update({ error: (e as Error).message }); }

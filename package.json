@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "loadtest": "node --import tsx scripts/loadtest.ts",
-    "start": "node --import tsx server/index.ts"
+    "start": "node --import tsx server/index.ts",
+    "loadtest:building": "node --import tsx scripts/building-loadtest.ts"
   },
   "dependencies": {
     "@babylonjs/core": "^8.0.0",

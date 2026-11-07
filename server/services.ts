@@ -1,3 +1,4 @@
+import {cleanFloors,type FloorId} from '../shared/building.js';
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
@@ -18,13 +19,13 @@ export async function initializeVoice() {
   }
   voiceReady = true;
 }
-export type Identity = { id: string; email: string; role: Role; name: string; department: string; avatar: typeof DEFAULT_AVATAR };
+export type Identity = { approved?:boolean;floors?:FloorId[];managedFloors?:FloorId[]; id: string; email: string; role: Role; name: string; department: string; avatar: typeof DEFAULT_AVATAR };
 export const loadTesting = env.NODE_ENV === 'test' && env.ENABLE_LOAD_TEST === 'true' && Boolean(env.LOAD_TEST_KEY);
 export async function authenticate(token: string): Promise<Identity> {
   if (loadTesting && token.startsWith(`${env.LOAD_TEST_KEY}:`)) {
     const id = token.slice(env.LOAD_TEST_KEY!.length + 1).replace(/[^a-z0-9-]/gi, '').slice(0, 40);
     if (!id) throw new Error('Invalid test identity');
-    return { id: `test-${id}`, email: `${id}@example.invalid`, role: 'member', name: `Pilot ${id}`, department: 'Test', avatar: DEFAULT_AVATAR };
+    return { id: `test-${id}`, email: `${id}@example.invalid`, role: 'member', name: `Pilot ${id}`, department: 'Test', approved:true, floors:['1','2','3','4'], managedFloors:[], avatar: DEFAULT_AVATAR };
   }
   if (!supabase || !token) throw new Error('Team sign-in is not configured. The local preview is available without connecting to the office.');
   const { data: { user }, error } = await supabase.auth.getUser(token);
@@ -36,12 +37,13 @@ export async function authenticate(token: string): Promise<Identity> {
     const { error } = await supabase.from('memberships').upsert({ email, role: 'owner', approved: true }, { onConflict: 'email' });
     if (error) throw new Error('Office membership setup is incomplete.');
   }
-  const membership = await supabase.from('memberships').select('role,approved,department').eq('email', email).maybeSingle();
+  const membership = await supabase.from('memberships').select('role,approved,department,floors,managed_floors').eq('email', email).maybeSingle();
   if(!membership.error&&!membership.data){await supabase.from('memberships').upsert({email,role:'member',approved:false},{onConflict:'email',ignoreDuplicates:true});}
-  if (membership.error || !membership.data?.approved) throw new Error('Your email is not on the approved team list yet. Ask the office owner to invite you.');
+  if(membership.error)throw new Error('Building membership migration is required.');
+  const member=membership.data||{role:'member',approved:false,department:'Visitor',floors:[],managed_floors:[]};
   const profile = await supabase.from('profiles').select('name,avatar').eq('id', user.id).maybeSingle();
   if (profile.error) throw new Error('Your profile could not be loaded. Please try again.');
-  return { id: user.id, email, role: membership.data.role, department: membership.data.department || 'Team', name: profile.data?.name || String(user.user_metadata.full_name || email.split('@')[0]).slice(0, 32), avatar: cleanAvatar(profile.data?.avatar) };
+  return { id: user.id, email, approved:member.approved,floors:cleanFloors(member.floors),managedFloors:cleanFloors(member.managed_floors),role: member.role, department: member.department || 'Team', name: profile.data?.name || String(user.user_metadata.full_name || email.split('@')[0]).slice(0, 32), avatar: cleanAvatar(profile.data?.avatar) };
 }
 export async function saveProfile(userId: string, p: Player) {
   if (!supabase) { if (loadTesting) return; throw new Error('Profile storage is unavailable.'); }

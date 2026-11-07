@@ -1,13 +1,16 @@
+import {floorStep,allRooms,IT_ROOMS,type FloorId} from './building.js';
+import {newElevator,type ElevatorState} from './elevator.js';
+import type {NpcState} from './npcs.js';
 import {cleanCosmetics,type Cosmetics} from './cosmetics.js';
 import type {RoomSettingsMap} from './room-settings.js';
 import { newPool, newBowling, type PoolGame, type BowlingGame } from './sports.js';
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export type Vec = { x: number; z: number };
 export type Avatar = { cosmetics?:Cosmetics; skin: string; hair: string; style: 'crop' | 'bob' | 'bun' | 'quiff' | 'ponytail' | 'curls'; shirt: string; trousers: string; accessory: 'none' | 'glasses' | 'cap' | 'headset'; top?:'tshirt'|'polo'|'buttondown'|'hoodie'; bottom?:'trousers'|'jeans'|'shorts'; shoes?:'sneakers'|'office' };
 export type Role = 'owner' | 'administrator' | 'member';
 export const EMOTES = ['wave','salute','clap','kiss','groove','shuffle','disco'] as const;
 export type Emote = '' | typeof EMOTES[number];
-export type Player = Vec & { id: string; userId: string; name: string; department: string; role: Role; rotation: number; y: number; vy: number; grounded: boolean; moving: boolean; room: string; status: 'available' | 'busy' | 'away'; avatar: Avatar; emote: Emote; emoteAt: number; seat: string | null; bed: string | null; voice: boolean; mic: boolean; forcedMute: boolean };
+export type Player = Vec & { floor:FloorId;approved:boolean;floors:FloorId[];managedFloors:FloorId[];inElevator:boolean; id: string; userId: string; name: string; department: string; role: Role; rotation: number; y: number; vy: number; grounded: boolean; moving: boolean; room: string; status: 'available' | 'busy' | 'away'; avatar: Avatar; emote: Emote; emoteAt: number; seat: string | null; bed: string | null; voice: boolean; mic: boolean; forcedMute: boolean };
 export type Rect = { x: number; z: number; w: number; d: number };
 export type OfficeRoom = Rect & { id: string; name: string; short: string; color: string; seats: number; side: 'north' | 'south' | 'east' | 'west'; enclosed: boolean; doorOffset?:number };
 export const DEFAULT_AVATAR: Avatar = { skin: '#d6a079', hair: '#3b2c28', style: 'crop', shirt: '#7c8871', trousers: '#384a46', accessory: 'none' };
@@ -38,11 +41,11 @@ export const inside = (p:Vec,r:Rect,pad=0) => Math.abs(p.x-r.x)<r.w/2+pad && Mat
 export const roomAt = (p:Vec) => ROOMS.find(r=>inside(p,r))?.id ?? 'hallway';
 export const voiceZone = (p:Pick<Player,'room'>) => ROOMS.find(r=>r.id===p.room)?.enclosed?p.room:'commons';
 export function entrance(r:OfficeRoom): Vec { return {x:r.x+(r.side==='west'?-r.w/2:r.side==='east'?r.w/2:(r.doorOffset||0)),z:r.z+(r.side==='north'?-r.d/2:r.side==='south'?r.d/2:(r.doorOffset||0))}; }
-export type DoorState={closed:boolean;until:number};
+export type DoorState={closed:boolean;until:number;version?:number;pending?:boolean};
 export type Doors=Record<string,DoorState>;
 export type EntryRequest={id:string;room:string;visitor:string;name:string;expires:number};
-export const newDoors=():Doors=>Object.fromEntries(ROOMS.filter(r=>r.enclosed).map(r=>[r.id,{closed:false,until:0}]));
-export function doorRect(room:string):Rect{const r=ROOMS.find(r=>r.id===room)!;return {...entrance(r),w:r.side==='north'||r.side==='south'?2.1:.18,d:r.side==='north'||r.side==='south'?.18:2.1};}
+export const newDoors=():Doors=>Object.fromEntries(allRooms().filter(r=>r.enclosed).map(r=>[r.id,{closed:false,until:0}]));
+export function doorRect(room:string):Rect{const r=allRooms().find(r=>r.id===room)!;return {...entrance(r),w:r.side==='north'||r.side==='south'?2.1:.18,d:r.side==='north'||r.side==='south'?.18:2.1};}
 export function doorBlocks(from:Vec,to:Vec,doors:Doors){return Object.entries(doors).some(([id,d])=>d.closed&&roomAt(from)!==id&&roomAt(to)===id);}
 export type Seat = Vec & { id:string; room:string; kind:'desk'|'shared'|'meeting'; rotation:number; y:number };
 export type Bed = Vec & { id:string;room:string;exit:Vec;y:number;rotation:number };
@@ -120,6 +123,7 @@ export function move(p:Vec,direction:Vec,dt:number,locks:Locks|boolean=newLocks(
 export type MoveInput={x:number;z:number;sprint?:boolean;heading?:number};
 export function relativeInput(forward:number,right:number,yaw:number,sprint=false):MoveInput{const length=Math.max(1,Math.hypot(forward,right));return {x:(Math.sin(yaw)*forward+Math.cos(yaw)*right)/length,z:(Math.cos(yaw)*forward-Math.sin(yaw)*right)/length,sprint};}
 export function stepPlayer(p:Player,input:MoveInput,dt:number,locks:Locks,doors:Doors={}){
+ if(p.inElevator)return;if(p.floor!=='3'){dt=Math.min(.1,Math.max(0,dt));p.moving=false;if(p.seat||p.bed)return;floorStep(p,input,dt,doors,Boolean(input.sprint));if(!p.moving&&Number.isFinite(input.heading))p.rotation=input.heading!;if(!p.grounded){p.vy-=GRAVITY*dt;p.y+=p.vy*dt;if(p.y<=0){p.y=0;p.vy=0;p.grounded=true;}}if(p.moving)p.emote='';return;}
  dt=Math.min(.1,Math.max(0,dt));p.moving=false;if(p.seat||p.bed)return;
  const length=Math.hypot(input.x,input.z);if(length>.05)p.rotation=Math.atan2(input.x,input.z);else if(Number.isFinite(input.heading))p.rotation=Math.atan2(Math.sin(input.heading!),Math.cos(input.heading!));
  const next=move(p,input,dt,locks,doors,input.sprint?SPRINT_SPEED:SPEED);
@@ -138,8 +142,8 @@ export function chaseCamera(p:Player){
  for(let t=.08;t<=1;t+=.035){const q={x:target.x+(desired.x-target.x)*t,y:target.y+(desired.y-target.y)*t,z:target.z+(desired.z-target.z)*t};if(cameraBlocked(q)){const safe=Math.max(.07,t-.045);position={x:target.x+(desired.x-target.x)*safe,y:target.y+(desired.y-target.y)*safe,z:target.z+(desired.z-target.z)*safe};break;}}return {target,position};}
 
 export function cleanAvatar(value:unknown):Avatar{const a=value&&typeof value==='object'?value as Record<string,unknown>:{};const color=(key:'skin'|'hair'|'shirt'|'trousers')=>typeof a[key]==='string'&&/^#[0-9a-f]{6}$/i.test(a[key] as string)?a[key] as string:DEFAULT_AVATAR[key];return {cosmetics:cleanCosmetics(a.cosmetics),skin:color('skin'),hair:color('hair'),shirt:color('shirt'),trousers:color('trousers'),top:['tshirt','polo','buttondown','hoodie'].includes(String(a.top))?a.top as Avatar['top']:'tshirt',bottom:['trousers','jeans','shorts'].includes(String(a.bottom))?a.bottom as Avatar['bottom']:'trousers',shoes:a.shoes==='office'?'office':'sneakers',style:['crop','bob','bun','quiff','ponytail','curls'].includes(String(a.style))?a.style as Avatar['style']:'crop',accessory:['none','glasses','cap','headset'].includes(String(a.accessory))?a.accessory as Avatar['accessory']:'none'};}
-export function makePlayer(id:string,name:string,avatar=DEFAULT_AVATAR):Player{return {...SPAWN,id,userId:id,name:name.slice(0,32),department:'Team',role:'member',rotation:Math.PI,y:0,vy:0,grounded:true,moving:false,room:'lounge',status:'available',avatar:cleanAvatar(avatar),emote:'',emoteAt:0,seat:null,bed:null,voice:false,mic:false,forcedMute:false};}
-export type ChatMessage={id:string;author:string;text:string;scope:'office'|'room';room:string;at:number};
+export function makePlayer(id:string,name:string,avatar=DEFAULT_AVATAR):Player{return {floor:'3',approved:true,floors:['3'],managedFloors:[],inElevator:false,...SPAWN,id,userId:id,name:name.slice(0,32),department:'Team',role:'member',rotation:Math.PI,y:0,vy:0,grounded:true,moving:false,room:'lounge',status:'available',avatar:cleanAvatar(avatar),emote:'',emoteAt:0,seat:null,bed:null,voice:false,mic:false,forcedMute:false};}
+export type ChatMessage={floor:FloorId;cabin:boolean;id:string;author:string;text:string;scope:'office'|'room';room:string;at:number};
 export type WorkLink={label:string;url:string};
 export type Game={board:number[];players:string[];turn:number;winner:number|null;draw:boolean};
 export const newGame=():Game=>({board:Array(42).fill(0),players:[],turn:1,winner:null,draw:false});
@@ -150,5 +154,5 @@ export type ActivityGames={connect4:Game;darts:Record<string,DartsGame>;chess:Ch
 export const newDarts=():DartsGame=>({players:[],scores:[301,301],turn:0,darts:0,start:301,winner:null,throws:[]});
 export const newChess=():ChessGame=>({players:[],fen:'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',turn:'w',lastMove:'',history:[],result:'',winner:null});
 export const newGames=():ActivityGames=>({connect4:newGame(),darts:{'darts-commons':newDarts()},chess:newChess(),pool:newPool(),bowling:newBowling()});
-export type Snapshot={roomSettings:RoomSettingsMap;protocol:number;players:Player[];locks:Locks;doors:Doors;games:ActivityGames;links:WorkLink[]};
-export const emptySnapshot=():Snapshot=>({roomSettings:{},protocol:PROTOCOL_VERSION,players:[],locks:newLocks(),doors:newDoors(),games:newGames(),links:[]});
+export type Snapshot={elevator:ElevatorState;npcs:NpcState[];inventory:string;roomSettings:RoomSettingsMap;protocol:number;players:Player[];locks:Locks;doors:Doors;games:ActivityGames;links:WorkLink[]};
+export const emptySnapshot=():Snapshot=>({elevator:newElevator(),npcs:[],inventory:'',roomSettings:{},protocol:PROTOCOL_VERSION,players:[],locks:newLocks(),doors:newDoors(),games:newGames(),links:[]});

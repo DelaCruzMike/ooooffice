@@ -27,6 +27,22 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+      - name: Wait for matching building backend
+        env:
+          OFFICE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+        run: |
+          node --input-type=module <<'NODE'
+          const url = (process.env.OFFICE_SERVER_URL || 'https://ooooffice-server.onrender.com').replace(/\/$/, '');
+          for (let attempt = 0; attempt < 180; attempt++) {
+            try {
+              const response = await fetch(url + '/health', {signal: AbortSignal.timeout(5000)});
+              const health = await response.json();
+              if (response.ok && health.ok && health.protocol === 5) process.exit(0);
+            } catch {}
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          }
+          throw new Error('Protocol-5 backend is not ready; frontend publication stopped.');
+          NODE
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

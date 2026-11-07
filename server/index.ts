@@ -1,3 +1,4 @@
+import {cleanFloors,mayEnter,mayManageFloor,roomFloor,resolveVoice,inventoryUrl} from '../shared/building.js';
 import {cleanRoomSettings,mayManage} from '../shared/room-settings.js';
 import 'dotenv/config';
 import http from 'node:http';
@@ -31,27 +32,34 @@ app.post('/api/voice', wrap(async (req, res) => {
   const id = String(req.body.sessionId || '');
   const p = office?.engine.players.get(id);
   if (!p || p.userId !== req.identity!.id) { res.status(403).json({ error: 'Join the office before connecting voice.' }); return; }
-  if (voiceBusy.has(id) || office.voiceTransitions.has(id)) { res.status(409).json({ error: 'Your conversation is changing. Please try again.' }); return; }
+  if (office.doorTransaction || voiceBusy.has(id) || office.voiceTransitions.has(id)) { res.status(409).json({ error: 'Your conversation is changing. Please try again.' }); return; }
   voiceBusy.add(id); office.voiceTransitions.add(id);
   try {
     await office.stopVoice(id);
     if (!office.engine.players.has(id)) throw new Error('Your office session ended.');
     if (req.body.disconnect) { p.voice = false; p.mic = false; res.json({ ok: true }); return; }
     if(office.engine.roomSettings[p.room]?.voice==='muted')throw new Error('Voice is disabled in this room.');
-    const zone = voiceZone(p);
+    if(!p.inElevator&&!mayEnter(p,p.floor))throw new Error('Floor access required.');const zone=resolveVoice(p,office.engine.doors,office.engine.roomSettings);
+    if(req.body.zone&&req.body.zone!==zone){res.status(409).json({error:'Your conversation is changing. Please try again.'});return;}
     const result = await voiceToken(p, zone);
-    if (!office.engine.players.has(id)) throw new Error('Your office session ended.');
+    if (!office.engine.players.has(id)||(!p.inElevator&&!mayEnter(p,p.floor))) throw new Error('Your office session ended.');
+    if(office.doorTransaction||zone!==resolveVoice(p,office.engine.doors,office.engine.roomSettings)){res.status(409).json({error:'Your conversation is changing. Please try again.'});return;}
     office.voiceSessions.set(id, zone); office.voiceExpiry.set(id, Date.now() + 20000);
     p.voice = true; p.mic = Boolean(req.body.microphone); p.forcedMute = false;
     res.json(result);
   } finally { voiceBusy.delete(id); office.voiceTransitions.delete(id); }
 }));
+const accessIdentity=(i:Identity)=>({role:i.role,approved:i.approved??true,floors:i.floors??['3' as const],managedFloors:i.managedFloors??[]});
+app.post('/api/access-request',wrap(async(req,res)=>{if(!supabase)throw new Error('Account storage unavailable.');const {error}=await supabase.from('memberships').update({access_requested:true}).eq('email',req.identity!.email);if(error)throw new Error('Could not request access.');res.json({ok:true});}));
+app.get('/api/inventory',wrap(async(req,res)=>{if(!mayEnter(accessIdentity(req.identity!),'1'))throw new Error('IT access required.');res.json({url:office.engine.inventory});}));
+app.post('/api/inventory',wrap(async(req,res)=>{if(!mayManageFloor(accessIdentity(req.identity!),'1'))throw new Error('IT manager access required.');if(!supabase)throw new Error('Storage unavailable.');const url=inventoryUrl(req.body.url);const {error}=await supabase.from('office_config').upsert({key:'it:inventory',value:url});if(error)throw new Error('Inventory link could not be saved.');office.engine.inventory=url;res.json({url});}));
+app.post('/api/rooms',wrap(async(req,res)=>{const id=String(req.body.room);if(!mayManageFloor(accessIdentity(req.identity!),roomFloor(id)))throw new Error('Floor manager access required.');if(!supabase)throw new Error('Storage unavailable.');const settings=cleanRoomSettings(id,req.body.settings);const {error}=await supabase.from('office_config').upsert({key:'room:'+id,value:settings});if(error)throw new Error('Room settings could not be saved.');office.engine.roomSettings[id]=settings;await office.reconcileVoice();res.json({ok:true});}));
 app.use('/api/admin', (req: AuthRequest, res, next) => {
-  if (req.identity!.role === 'member') { res.status(403).json({ error: 'Administrator access required.' }); return; } next();
+  if (req.identity!.approved===false || req.identity!.role === 'member') { res.status(403).json({ error: 'Administrator access required.' }); return; } next();
 });
 app.get('/api/admin/members', wrap(async (_req, res) => {
   if (!supabase) throw new Error('Account storage is not configured.');
-  const { data, error } = await supabase.from('memberships').select('email,role,approved,department').order('email');
+  const { data, error } = await supabase.from('memberships').select('email,role,approved,department,floors,managed_floors,access_requested').order('email');
   if (error) throw new Error('Members could not be loaded.'); res.json({ members: data });
 }));
 app.post('/api/admin/members', wrap(async (req, res) => {
@@ -63,12 +71,12 @@ app.post('/api/admin/members', wrap(async (req, res) => {
   const role = req.body.role === 'administrator' ? 'administrator' : 'member';
   if (email === req.identity!.email || !mayManage(req.identity!.role,existing?.role||'member',role)) { res.status(403).json({ error: 'Only the owner can manage administrators. Owner and self-access cannot be changed here.' }); return; }
   const approved = req.body.approved === true;
-  const { error } = await supabase.from('memberships').upsert({ email, role, approved, department: String(req.body.department || 'Team').slice(0, 48) });
+  const { error } = await supabase.from('memberships').upsert({ email, role, approved, department: String(req.body.department || 'Team').slice(0, 48),floors:cleanFloors(req.body.floors??['3']),managed_floors:cleanFloors(req.body.managed_floors) });
   if (error) throw new Error('Membership could not be updated.');
   let cleanupFailed = false;
   for (const [id, i] of office.identities) if (i.email === email) {
-    if (!approved) { try { await office.removeSession(id, 'Your office access was revoked.'); } catch { cleanupFailed = true; } }
-    else { const p = office.engine.players.get(id); if (p) { p.role = role; p.department = String(req.body.department || 'Team').slice(0, 48); } }
+    if (!approved) {const p=office.engine.players.get(id);if(p){p.approved=false;p.floors=[];p.managedFloors=[];}try {await office.stopVoice(id);if(p)office.engine.lobby(p);}catch{cleanupFailed=true;await office.removeSession(id,'Floor access revoked. Please reconnect in the lobby.').catch(()=>{});} }
+    else { const p = office.engine.players.get(id); if (p) { p.role=role;p.approved=approved;p.floors=cleanFloors(req.body.floors??['3']);p.managedFloors=cleanFloors(req.body.managed_floors);p.department=String(req.body.department||'Team').slice(0,48);if(!mayEnter(p,p.floor)){await office.stopVoice(id);office.engine.lobby(p);} } }
   }
   if (cleanupFailed) throw new Error('Access is revoked. Voice disconnection is still retrying; check the participant list.');
   res.json({ ok: true });

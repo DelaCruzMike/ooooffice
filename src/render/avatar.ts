@@ -9,7 +9,7 @@ import { groundHeight,type Player } from '../../shared/world';
 export class AvatarRig {
  root:TransformNode;head:TransformNode;leftArm:TransformNode;rightArm:TransformNode;leftElbow:TransformNode;rightElbow:TransformNode;leftLeg:TransformNode;rightLeg:TransformNode;leftKnee:TransformNode;rightKnee:TransformNode;heart:TransformNode;headset:TransformNode;shadow:Mesh;label:Mesh;private faded=false;appearance:string;
  constructor(public art:OfficeArt,p:Player,myId:string){
- const c=p.avatar.cosmetics||{},a={...p.avatar,style:c.hairstyle&&c.hairstyle!=='legacy'?'crop':p.avatar.style,top:c.topStyle&&c.topStyle!=='legacy'?'tshirt':p.avatar.top};this.appearance=JSON.stringify(p.avatar);this.root=new TransformNode(`person-${p.id}`,art.scene);this.root.position.set(p.x,p.y,p.z);this.root.rotation.y=p.rotation;
+ const c=p.avatar.cosmetics||{},a={...p.avatar,style:c.hairstyle&&c.hairstyle!=='legacy'?'crop':p.avatar.style,top:c.topStyle&&c.topStyle!=='legacy'?'tshirt':p.avatar.top};this.appearance=JSON.stringify([p.avatar,p.name,p.department,p.role,p.approved]);this.root=new TransformNode(`person-${p.id}`,art.scene);this.root.position.set(p.x,p.y,p.z);this.root.rotation.y=p.rotation;
  this.root.scaling.set(c.build==='slim'?.9:c.build==='broad'?1.1:1,c.height==='short'?.95:c.height==='tall'?1.05:1,1);
  const joint=(name:string,x:number,y:number,z:number,parent=this.root)=>{const n=new TransformNode(name,art.scene);n.parent=parent;n.position.set(x,y,z);return n;};
  const tapered=(name:string,parent:TransformNode,length:number,top:number,bottom:number,color:string)=>{const m=MeshBuilder.CreateCylinder(name,{height:length,diameterTop:top,diameterBottom:bottom,tessellation:6},art.scene);m.position.y=-length/2;m.parent=parent;m.material=art.mat(color);return m;};
@@ -67,10 +67,13 @@ export class AvatarRig {
  this.headset=joint('call-center headset',0,0,0,this.head);art.box('headset band',0,.23,0,.43,.045,.12,'#303c42',this.headset);for(const s of[-1,1]){art.box('headset band side',s*.2,.11,0,.045,.28,.12,'#303c42',this.headset);art.box('oversized ear cushion',s*.21,-.01,0,.13,.22,.19,'#26343b',this.headset);}art.box('headset boom',.17,-.08,.2,.04,.035,.35,'#38494d',this.headset);this.headset.setEnabled(false);
  this.heart=joint('flying kiss',0,1.68,.35);for(const s of[-1,1])art.sphere('heart lobe',s*.045,.035,0,.12,'#ce7c7a',this.heart);const tip=art.box('heart point',0,-.02,0,.11,.11,.065,'#ce7c7a',this.heart);tip.rotation.z=Math.PI/4;this.heart.setEnabled(false);
  const shadow=MeshBuilder.CreateGround('character contact shadow',{width:.65,height:.65},art.scene);shadow.material=art.shadowMaterial();shadow.isPickable=false;this.shadow=shadow;
+ for(const side of[-1,1]){const strap=art.box('purple employee lanyard',side*.065,1.29,.235,.024,.32,.018,'#7952b3',this.root);strap.rotation.z=side*-.35;}
+ art.box('company ID',0,1.09,.25,.19,.25,.025,p.approved?'#f3efe1':'#d7d3c9',this.root);
+ art.text(`${p.name}\n${p.approved?p.department:'Visitor'}\n${p.approved?p.role:'Awaiting approval'}`,0,1.09,.268,.18,.2,'#35443e','',Math.PI,this.root);
  this.label=art.text(p.id===myId?'You':p.name,0,2.04,0,1.45,.25,'#eef0e3','#3d5148',0,this.root);this.label.billboardMode=Mesh.BILLBOARDMODE_ALL;
  }
  update(p:Player,t:number,dt:number,myId:string,me:Player|undefined,frame:number){
- this.shadow.position.set(p.x,groundHeight(p)+.065,p.z);this.shadow.setEnabled(!p.bed);this.shadow.visibility=.65/(1+Math.max(0,p.y-groundHeight(p)));
+ this.shadow.position.set(p.x,(p.floor==='3'?groundHeight(p):0)+.065,p.z);this.shadow.setEnabled(!p.bed);this.shadow.visibility=.65/(1+Math.max(0,p.y-(p.floor==='3'?groundHeight(p):0)));
  const distance=me?Math.hypot(me.x-p.x,me.z-p.z):0;this.root.setEnabled(distance<28||p.id===myId);if(!this.root.isEnabled()){this.shadow.setEnabled(false);return;}this.label.setEnabled(p.id!==myId&&distance<14);
  this.root.position.x+=(p.x-this.root.position.x)*Math.min(1,dt*18);this.root.position.z+=(p.z-this.root.position.z)*Math.min(1,dt*18);
  const angle=Math.atan2(Math.sin(p.rotation-this.root.rotation.y),Math.cos(p.rotation-this.root.rotation.y));this.root.rotation.y+=angle*Math.min(1,dt*16);
@@ -92,5 +95,5 @@ export class AvatarRig {
  if(['groove','shuffle','disco'].includes(p.emote)){const disco=p.emote==='disco',shuffle=p.emote==='shuffle',beat=Math.sin(e*(shuffle?10:6));this.root.position.y=p.y+Math.abs(beat)*.07;this.root.rotation.z=beat*.07;this.leftArm.rotation.z=.55+beat*.3;this.rightArm.rotation.z=disco?2.3:-.55-beat*.3;this.leftElbow.rotation.x=-1;this.rightElbow.rotation.x=disco?-.2:-1;this.leftLeg.rotation.x=beat*(shuffle?.5:.15);this.rightLeg.rotation.x=-beat*(shuffle?.5:.15);this.root.rotation.y+=disco?Math.sin(e*3)*.2:0;}
  }
  fade(value:boolean){if(value===this.faded)return;this.faded=value;for(const mesh of this.root.getChildMeshes())mesh.visibility=value?.13:1;}
- dispose(){this.shadow.dispose();const mat=this.label.material as StandardMaterial;mat.diffuseTexture?.dispose();mat.dispose();this.root.dispose();}
+ dispose(){this.shadow.dispose();this.root.dispose();}
 }
