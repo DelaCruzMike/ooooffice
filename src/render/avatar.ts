@@ -11,11 +11,12 @@ export class AvatarRig {
  const a=p.avatar;this.appearance=JSON.stringify(a);this.root=new TransformNode(`person-${p.id}`,art.scene);this.root.position.set(p.x,p.y,p.z);this.root.rotation.y=p.rotation;
  const joint=(name:string,x:number,y:number,z:number,parent=this.root)=>{const n=new TransformNode(name,art.scene);n.parent=parent;n.position.set(x,y,z);return n;};
  const tapered=(name:string,parent:TransformNode,length:number,top:number,bottom:number,color:string)=>{const m=MeshBuilder.CreateCylinder(name,{height:length,diameterTop:top,diameterBottom:bottom,tessellation:6},art.scene);m.position.y=-length/2;m.parent=parent;m.material=art.mat(color);return m;};
- const bottom=a.bottom||'trousers',legColor=bottom==='jeans'?'#40536a':a.trousers;
+ const bottom=a.bottom||'trousers',legColor=a.trousers;
  // Angular torso and pelvis, with a narrower waist and shaped shoulders.
  const torso=MeshBuilder.CreateCylinder('faceted shirt',{height:.58,diameterTop:.69,diameterBottom:.49,tessellation:6},art.scene);torso.parent=this.root;torso.position.y=1.14;torso.scaling.set(.9,1,.59);torso.material=art.mat(a.shirt);
  if(a.top==='polo'||a.top==='buttondown'){for(const side of[-1,1]){const collar=art.box('shirt collar',side*.09,1.43,.14,.13,.045,.13,'#e5e1d3',this.root);collar.rotation.z=side*.4;}if(a.top==='buttondown')for(let i=0;i<5;i++)art.sphere('shirt button',0,1.33-i*.085,.2,.025,'#e5e1d3',this.root);}if(a.top==='hoodie'){art.sphere('hood',0,1.42,-.14,.35,a.shirt,this.root);for(const side of[-1,1])art.box('hoodie drawstring',side*.075,1.3,.2,.018,.22,.02,'#e4e1d0',this.root);art.box('hoodie pouch',0,1.01,.19,.27,.14,.04,a.shirt,this.root);}
  const hips=art.cyl('trouser hips',0,.83,0,.45,.22,a.trousers,this.root,.49);hips.scaling.z=.68;
+ if(bottom==='jeans')for(const side of[-1,1]){art.box('denim pocket',side*.13,.85,.15,.12,.13,.025,a.trousers,this.root);art.box('denim pocket stitch',side*.13,.9,.168,.1,.012,.01,'#a5ae9b',this.root);}
  art.cyl('neck',0,1.47,0,.13,.17,a.skin,this.root);
  this.head=joint('head',0,1.65,0);const face=art.sphere('angular face',0,0,.015,.36,a.skin,this.head);face.scaling.set(.88,1.22,.9);
  const jaw=art.box('jaw',0,-.1,.025,.22,.12,.23,a.skin,this.head);jaw.rotation.y=.03;

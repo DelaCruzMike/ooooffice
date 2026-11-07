@@ -113,9 +113,9 @@ export class OfficeRoom extends Room {
     catch (error) { this.clock.setTimeout(() => void this.cleanupVoice(id), 3000); throw error; }
   }
   transition(p: Player, next: Vec) {
-    if (this.voiceTransitions.has(p.id)) return false;
     const current = this.voiceSessions.get(p.id);
     const nextZone = voiceZone({ room: roomAt(next) });
+    if (this.voiceTransitions.has(p.id)) return nextZone === voiceZone(p);
     if (!current || current === nextZone) return true;
     if (Date.now() < (this.nextVoiceAttempt.get(p.id) || 0)) return false;
     this.voiceTransitions.add(p.id);

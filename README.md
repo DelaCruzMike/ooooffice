@@ -2,7 +2,7 @@
 
 A standalone, low-poly virtual team office. A high-rise floor with 46 department workstations, a 50-seat tiered auditorium, an 8-seat meeting room, 20 usable beds, an outdoor veranda, a furnished canteen, customizable faceted human characters, and playable darts, chess, Connect Four, eight-ball billiards, and ten-pin bowling.
 
-**Current delivery:** [Ooooffice](https://delacruzmike.github.io/ooooffice/) is hosted on GitHub Pages. Version 0.3 adds mouse free-look, three camera views, sprinting, a centered Q emote wheel, expanded wardrobe, usable privacy doors, and authoritative pool/bowling physics. Supabase and the free Render server are provisioned; Google is enabled and service credentials are configured in the providers' dashboards. The release has 45 automated behavior/security/physics tests. Real-account, real-device, and voice pilot acceptance must be verified separately from simulated traffic. See the verification section below for the recorded capacity result.
+**Current delivery:** [Ooooffice](https://delacruzmike.github.io/ooooffice/) is hosted on GitHub Pages. Version 0.3 adds mouse free-look, three camera views, sprinting, a centered Q emote wheel, expanded wardrobe, usable privacy doors, and authoritative pool/bowling physics. Supabase and the free Render server are provisioned; Google is enabled and service credentials are configured in the providers' dashboards. The release has 46 automated behavior/security/physics tests. Real-account, real-device, and voice pilot acceptance must be verified separately from simulated traffic. See the verification section below for the recorded capacity result.
 
 ## Try the local preview
 
